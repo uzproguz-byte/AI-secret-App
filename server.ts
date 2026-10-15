@@ -126,7 +126,7 @@ app.post('/api/analyze', async (req, res) => {
 You are a high-speed AI Education Assistant solving questions from screen sharing or user input.
 
 SPEED & ACCURACY RULE:
-- Solve in under 2.5 seconds. Be direct and concise.
+- Prioritize speed and accuracy. Be direct and concise.
 - Target Language: ${language} (${langInstructions})
 - Subject: ${subject}
 - Focus Question Index: ${selectedQuestionIndex}
@@ -140,21 +140,16 @@ OUTPUT INSTRUCTIONS:
 
     parts.push({ text: promptText });
 
-    const systemInstruction = `You are a rapid-response educational AI tutor. You analyze questions instantly and output crisp, accurate structured JSON in under 3 seconds.`;
+    const systemInstruction = `You are a rapid-response educational AI tutor. Read the supplied image or text carefully and return concise, accurate structured JSON as quickly as possible. State uncertainty rather than guessing when key details are unreadable.`;
 
     // Multi-model resilience pool with independent quota
-    const candidateModels = [
-      'gemini-flash-lite-latest',
-      'gemini-3.1-flash-lite',
-      'gemini-3.5-flash',
-      'gemini-3.7-flash',
-    ];
+    const candidateModels = ['gemini-3.5-flash-lite']; // Stable, low-latency multimodal model.
     let lastError: any = null;
     let responseText: string | null = null;
     let detectedRetrySeconds = 25;
 
     for (const modelName of candidateModels) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      for (let attempt = 1; attempt <= 1; attempt++) {
         try {
           console.log(`[AI Solver] Calling ${modelName} (attempt ${attempt})...`);
           const response = await ai.models.generateContent({
@@ -162,6 +157,7 @@ OUTPUT INSTRUCTIONS:
             contents: { parts },
             config: {
               systemInstruction,
+              thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
               maxOutputTokens: 600,
               responseMimeType: 'application/json',
             responseSchema: {
@@ -301,15 +297,7 @@ OUTPUT INSTRUCTIONS:
           detectedRetrySeconds = Math.ceil(parseFloat(retryMatch[1]));
         }
 
-        // If high demand 503, pause before second attempt on same model
-        if (errMsg.includes('503') || errMsg.includes('high demand') || errMsg.includes('UNAVAILABLE')) {
-          if (attempt === 1) {
-            await new Promise((r) => setTimeout(r, 600));
-            continue;
-          }
-        }
-
-        // If rate limit or other error, break to next candidate model
+        // Don't retry automatically: return transient errors quickly instead of delaying the answer.
         break;
       }
     }
