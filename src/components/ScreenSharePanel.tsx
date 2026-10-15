@@ -70,7 +70,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
       setErrorMessage(
         t.screenShareNotSupported ||
-          'Your current browser does not support WebRTC screen capture. On Android, please use Chrome or Edge.'
+          'This browser cannot share its screen. On phones, use the Upload tab with a screenshot or the Camera tab to photograph a worksheet. Screen-sharing support varies by mobile browser.'
       );
       return;
     }
@@ -263,7 +263,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
 
             <div className="flex items-center gap-1.5">
               <span className="bg-amber-500/20 text-amber-300 backdrop-blur-md px-2.5 py-1 rounded-full border border-amber-500/40 text-[11px] font-bold shadow">
-                ⚡ &lt;3s solve
+                ⚡ &lt;5s goal solve
               </span>
             </div>
           </div>
@@ -279,7 +279,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
                   <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                   Solving Screen in Real-Time: {elapsedSeconds}s
                 </p>
-                <p className="text-[11px] text-indigo-300">Targeting under 3 seconds...</p>
+                <p className="text-[11px] text-indigo-300">Aim: under 5 seconds (network-dependent).</p>
               </div>
             </div>
           </div>
@@ -344,7 +344,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
               <Video className="w-5 h-5" />
               <span>{t.startScreenShare}</span>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-black/20">
-                ⚡ &lt;3s
+                ⚡ &lt;5s goal
               </span>
             </button>
 
@@ -411,7 +411,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
               ) : (
                 <>
                   <Zap className="w-4 h-4 fill-amber-300 text-amber-300" />
-                  <span>Analyze Screen (&lt;3s)</span>
+                  <span>Analyze Screen (&lt;5s goal)</span>
                 </>
               )}
             </button>
