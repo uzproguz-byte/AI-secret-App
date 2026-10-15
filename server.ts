@@ -164,7 +164,7 @@ OUTPUT INSTRUCTIONS:
     const systemInstruction = `You are a rapid-response educational AI tutor. Read the supplied image or text carefully and return concise, accurate structured JSON as quickly as possible. State uncertainty rather than guessing when key details are unreadable.`;
 
     // Multi-model resilience pool with independent quota
-    const candidateModels = ['gemini-3.5-flash-lite']; // Stable, low-latency multimodal model.
+    const candidateModels = ['gemini-3.1-flash-lite']; // Stable, low-latency multimodal model.
     let lastError: any = null;
     let responseText: string | null = null;
     let detectedRetrySeconds = 25;
@@ -180,7 +180,7 @@ OUTPUT INSTRUCTIONS:
             config: {
               systemInstruction,
               thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-              maxOutputTokens: 1200,
+              maxOutputTokens: 384,
               responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
