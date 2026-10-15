@@ -51,6 +51,7 @@ export default function App() {
   // Analysis target configuration
   const [targetLang, setTargetLang] = useState<SupportedLanguage>('auto');
   const [targetSubject, setTargetSubject] = useState<SupportedSubject>('auto');
+  const [showStudySettings, setShowStudySettings] = useState<boolean>(false);
 
   // Input tabs: 'screen' is the primary mode on all devices
   const [inputMode, setInputMode] = useState<InputMode>('screen');
@@ -240,69 +241,70 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Hero Section */}
-        <div className="relative rounded-3xl overflow-hidden p-6 sm:p-8 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 shadow-2xl">
+        <div className="relative rounded-2xl overflow-hidden p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 shadow-xl">
           <div className="absolute top-0 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-10 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
             <div className="space-y-2 max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-indigo-500/20 text-xs font-semibold text-indigo-300">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                 <span>AI Education and Practice Assistant</span>
               </div>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white leading-tight">
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-white leading-tight">
                 {t.appTitle}
               </h2>
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 {t.appSubtitle}
               </p>
             </div>
 
-            {/* Language & Subject Filters */}
-            <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80 backdrop-blur-md space-y-3 shrink-0 min-w-[280px]">
-              {/* Target Response Language */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>{t.selectLanguage}</span>
-                </label>
-                <select
-                  value={targetLang}
-                  onChange={(e) => setTargetLang(e.target.value as SupportedLanguage)}
-                  className="w-full text-xs font-medium bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                >
-                  <option value="auto">🌐 {t.autoDetect}</option>
-                  <option value="uz">🇺🇿 O'zbek tili (Uzbek)</option>
-                  <option value="en">🇬🇧 English</option>
-                  <option value="ar">🇸🇦 العربية (Arabic - RTL)</option>
-                  <option value="ru">🇷🇺 Русский (Russian)</option>
-                </select>
-              </div>
-
-              {/* Subject Filter */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>{t.selectSubject}</span>
-                </label>
-                <select
-                  value={targetSubject}
-                  onChange={(e) => setTargetSubject(e.target.value as SupportedSubject)}
-                  className="w-full text-xs font-medium bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                >
-                  <option value="auto">✨ {t.autoDetect}</option>
-                  <option value="math">📐 {t.subjectMath}</option>
-                  <option value="english">📝 {t.subjectEnglish}</option>
-                  <option value="arabic">📖 {t.subjectArabic}</option>
-                  <option value="it">💻 {t.subjectIT}</option>
-                  <option value="science">🔬 {t.subjectScience}</option>
-                  <option value="history">🏛️ {t.subjectHistory}</option>
-                  <option value="geography">🌍 {t.subjectGeography}</option>
-                  <option value="general">💡 {t.subjectGeneral}</option>
-                </select>
-              </div>
+            {/* Optional study settings */}
+            <div className="flex flex-col gap-2 md:items-end shrink-0 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => setShowStudySettings((visible) => !visible)}
+                aria-expanded={showStudySettings}
+                className="inline-flex items-center justify-center gap-2 self-start md:self-end px-3 py-2 rounded-xl bg-slate-950/70 hover:bg-slate-900 border border-slate-700 text-xs font-bold text-slate-200 transition-colors"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-indigo-300" />
+                {showStudySettings ? 'Hide study settings' : 'Study settings'}
+                <span className="text-slate-400">{showStudySettings ? '−' : '+'}</span>
+              </button>
+              {showStudySettings && (
+                <div className="w-full md:min-w-[260px] md:max-w-[320px] p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-indigo-400" /><span>{t.selectLanguage}</span>
+                    </label>
+                    <select value={targetLang} onChange={(e) => setTargetLang(e.target.value as SupportedLanguage)} className="w-full text-xs font-medium bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+                      <option value="auto">🌐 {t.autoDetect}</option>
+                      <option value="uz">🇺🇿 O'zbek tili (Uzbek)</option>
+                      <option value="en">🇬🇧 English</option>
+                      <option value="ar">🇸🇦 العربية (Arabic - RTL)</option>
+                      <option value="ru">🇷🇺 Русский (Russian)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-indigo-400" /><span>{t.selectSubject}</span>
+                    </label>
+                    <select value={targetSubject} onChange={(e) => setTargetSubject(e.target.value as SupportedSubject)} className="w-full text-xs font-medium bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+                      <option value="auto">✨ {t.autoDetect}</option>
+                      <option value="math">📐 {t.subjectMath}</option>
+                      <option value="english">📝 {t.subjectEnglish}</option>
+                      <option value="arabic">📖 {t.subjectArabic}</option>
+                      <option value="it">💻 {t.subjectIT}</option>
+                      <option value="science">🔬 {t.subjectScience}</option>
+                      <option value="history">🏛️ {t.subjectHistory}</option>
+                      <option value="geography">🌍 {t.subjectGeography}</option>
+                      <option value="general">💡 {t.subjectGeneral}</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -444,7 +446,7 @@ export default function App() {
                 <div className="space-y-1.5">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold shadow-inner">
                     <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400 animate-pulse" />
-                    <span>⚡ Solving Fast: {elapsedSeconds}s</span>
+                    <span>Analyzing · {elapsedSeconds}s</span>
                   </div>
                   <h3 className="text-lg font-bold text-white">
                     {t.loadingMessage}
@@ -459,7 +461,7 @@ export default function App() {
                 </div>
 
                 <span className="text-[11px] text-slate-500">
-                  Tez rejim yoqilgan · natija savol va tarmoqqa bog‘liq
+                  Practice analysis time depends on the question and connection.
                 </span>
               </div>
             )}
@@ -550,12 +552,10 @@ export default function App() {
                 </div>
                 <div className="space-y-1 max-w-sm">
                   <h3 className="text-base font-bold text-white">
-                    Ready to Solve Educational Questions
+                    Ready for a study session
                   </h3>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    Click <strong className="text-slate-200">Start Screen Share</strong>,{' '}
-                    <strong className="text-slate-200">Upload Image</strong>, or{' '}
-                    <strong className="text-slate-200">Paste Question</strong> on the left to begin instant AI analysis.
+                    Share a worksheet, upload a question image, or enter text to review a practice question with an AI explanation.
                   </p>
                 </div>
 
