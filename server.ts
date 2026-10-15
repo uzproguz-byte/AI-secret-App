@@ -164,7 +164,7 @@ OUTPUT INSTRUCTIONS:
     const systemInstruction = `You are a rapid-response educational AI tutor. Read the supplied image or text carefully and return concise, accurate structured JSON as quickly as possible. State uncertainty rather than guessing when key details are unreadable.`;
 
     // Multi-model resilience pool with independent quota
-    const candidateModels = ['gemini-3.1-flash-lite']; // Stable, low-latency multimodal model.
+    const candidateModels = ['gemini-3.7-flash']; // Stable, low-latency multimodal model.
     let lastError: any = null;
     let responseText: string | null = null;
     let detectedRetrySeconds = 25;
@@ -179,16 +179,13 @@ OUTPUT INSTRUCTIONS:
             contents: { parts },
             config: {
               systemInstruction,
-              thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
               maxOutputTokens: 384,
               responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
               properties: {
-                multipleQuestionsFound: {
-                  type: Type.BOOLEAN,
-                  description: 'Whether multiple distinct questions exist in the input',
-                },
+                multipleQuestionsFound: { type: Type.BOOLEAN },
                 allQuestionsSummary: {
                   type: Type.ARRAY,
                   items: {
@@ -200,91 +197,36 @@ OUTPUT INSTRUCTIONS:
                     },
                     required: ['index', 'title', 'snippet'],
                   },
-                  description: 'List of detected questions if multiple are found',
                 },
-                activeQuestionIndex: {
-                  type: Type.INTEGER,
-                  description: 'The index of the question solved in this response',
-                },
-                questionText: {
-                  type: Type.STRING,
-                  description: 'The transcribed text of the question being solved',
-                },
-                detectedSubject: {
-                  type: Type.STRING,
-                  description: 'Subject e.g. Mathematics, English Grammar, Arabic Grammar, IT & Programming, Physics, etc.',
-                },
-                detectedLanguage: {
-                  type: Type.STRING,
-                  description: 'Language of the question e.g. Uzbek, English, Arabic, Russian',
-                },
-                isMultipleChoice: {
-                  type: Type.BOOLEAN,
-                  description: 'Whether the question has multiple choice options',
-                },
+                activeQuestionIndex: { type: Type.INTEGER },
+                questionText: { type: Type.STRING },
+                detectedSubject: { type: Type.STRING },
+                detectedLanguage: { type: Type.STRING },
+                isMultipleChoice: { type: Type.BOOLEAN },
                 options: {
                   type: Type.ARRAY,
                   items: {
                     type: Type.OBJECT,
                     properties: {
-                      label: { type: Type.STRING, description: 'Choice letter, e.g. A, B, C, D' },
-                      text: { type: Type.STRING, description: 'Choice option text' },
-                      isCorrect: { type: Type.BOOLEAN, description: 'Whether this option is the correct answer' },
-                      box2d: {
-                        type: Type.ARRAY,
-                        items: { type: Type.INTEGER },
-                        description: '[ymin, xmin, ymax, xmax] normalized to 0-1000 if visible on image, or empty',
-                      },
+                      label: { type: Type.STRING },
+                      text: { type: Type.STRING },
+                      isCorrect: { type: Type.BOOLEAN },
+                      box2d: { type: Type.ARRAY, items: { type: Type.INTEGER } },
                     },
                     required: ['label', 'text', 'isCorrect'],
                   },
                 },
-                correctAnswerLabel: {
-                  type: Type.STRING,
-                  description: 'Correct choice label (A, B, C, D) or "Direct Answer" if open ended',
-                },
-                correctAnswerText: {
-                  type: Type.STRING,
-                  description: 'The exact value or text of the correct answer',
-                },
-                confidence: {
-                  type: Type.STRING,
-                  description: 'HIGH, MEDIUM, or LOW',
-                },
-                confidenceScore: {
-                  type: Type.INTEGER,
-                  description: 'Estimated confidence percentage 0-100',
-                },
-                isUnclear: {
-                  type: Type.BOOLEAN,
-                  description: 'True if question or image is ambiguous, blurry, or missing data',
-                },
-                unclearReason: {
-                  type: Type.STRING,
-                  description: 'Explanation if the question is unclear or unverifiable',
-                },
-                warningNotice: {
-                  type: Type.STRING,
-                  description: 'Any helpful caveat or restriction notice for the user',
-                },
-                stepByStepExplanation: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: 'Ordered steps of deduction, calculation, or grammatical analysis',
-                },
-                summaryExplanation: {
-                  type: Type.STRING,
-                  description: 'Clear, concise, beginner-friendly final explanation in the target language',
-                },
-                keyConcepts: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: 'Core concepts, rules, or formulas used',
-                },
-                diagramDescription: {
-                  type: Type.STRING,
-                  description: 'Description of any diagram, table, chart, or graph in the question',
-                },
+                correctAnswerLabel: { type: Type.STRING },
+                correctAnswerText: { type: Type.STRING },
+                confidence: { type: Type.STRING },
+                confidenceScore: { type: Type.INTEGER },
+                isUnclear: { type: Type.BOOLEAN },
+                unclearReason: { type: Type.STRING },
+                warningNotice: { type: Type.STRING },
+                stepByStepExplanation: { type: Type.ARRAY, items: { type: Type.STRING } },
+                summaryExplanation: { type: Type.STRING },
+                keyConcepts: { type: Type.ARRAY, items: { type: Type.STRING } },
+                diagramDescription: { type: Type.STRING },
               },
               required: [
                 'questionText',
