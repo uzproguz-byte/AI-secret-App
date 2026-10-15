@@ -178,28 +178,24 @@ export const ScreenSharePanel: React.FC<Props> = ({
     }
   }, [isLoading, onAnalyzeFrame]);
 
-  // Handle auto-solve interval (throttled to 6s to prevent 429 quota errors)
+  // Schedule the next automatic scan only after the current analysis finishes.
+  // This avoids duplicate calls while Gemini is still processing a frame.
   useEffect(() => {
-    if (autoSolveActive && isSharing) {
-      if (!isLoading) {
-        handleCaptureAndAnalyze();
-      }
-
-      autoScanTimerRef.current = setInterval(() => {
-        if (!isLoading && isSharing) {
-          handleCaptureAndAnalyze();
-        }
-      }, 6000);
-    } else {
-      if (autoScanTimerRef.current) {
-        clearInterval(autoScanTimerRef.current);
-        autoScanTimerRef.current = null;
-      }
+    if (autoScanTimerRef.current) {
+      clearTimeout(autoScanTimerRef.current);
+      autoScanTimerRef.current = null;
     }
+
+    if (!autoSolveActive || !isSharing || isLoading) return;
+
+    autoScanTimerRef.current = setTimeout(() => {
+      handleCaptureAndAnalyze();
+    }, 10000);
 
     return () => {
       if (autoScanTimerRef.current) {
-        clearInterval(autoScanTimerRef.current);
+        clearTimeout(autoScanTimerRef.current);
+        autoScanTimerRef.current = null;
       }
     };
   }, [autoSolveActive, isSharing, isLoading, handleCaptureAndAnalyze]);
@@ -252,7 +248,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
               <span className="text-xs font-bold text-white tracking-wide">
-                SCREEN LIVE
+                EKRAN ULASHILDI
               </span>
               {streamResolution && (
                 <span className="text-[10px] text-slate-400 font-mono border-l border-slate-700 pl-2 hidden sm:inline">
@@ -277,9 +273,9 @@ export const ScreenSharePanel: React.FC<Props> = ({
               <div className="text-left">
                 <p className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                  Solving Screen in Real-Time: {elapsedSeconds}s
+                  Savol tahlil qilinmoqda · {elapsedSeconds}s
                 </p>
-                <p className="text-[11px] text-indigo-300">Aim: under 5 seconds (network-dependent).</p>
+                <p className="text-[11px] text-indigo-300">Natija tayyor bo‘lishi bilan shu yerda ko‘rinadi.</p>
               </div>
             </div>
           </div>
@@ -332,7 +328,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
                 {t.startScreenShare}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Share your screen, test tab, or mobile screen. When active, solutions appear instantly right here in AI Study Assistant in under 3 seconds!
+                Ekranni ulashing, savolni oching va pastdagi <strong className="text-slate-200">Tahlil qilish</strong> tugmasini bosing. Javob shu yerda ko‘rinadi.
               </p>
             </div>
 
@@ -344,7 +340,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
               <Video className="w-5 h-5" />
               <span>{t.startScreenShare}</span>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-black/20">
-                ⚡ &lt;5s goal
+                <Zap className="inline w-3 h-3 mr-1" /> Tez rejim
               </span>
             </button>
 
@@ -363,8 +359,13 @@ export const ScreenSharePanel: React.FC<Props> = ({
 
       {/* Control bar when sharing is active */}
       {isSharing && (
-        <div className="p-4 rounded-3xl bg-slate-900/90 border border-indigo-500/40 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
-          {/* Auto solve toggle */}
+        <div className="p-4 sm:p-5 rounded-3xl bg-slate-900/90 border border-indigo-500/40 shadow-2xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="text-left">
+              <p className="text-sm font-bold text-white">Ekran tayyor</p>
+              <p className="text-xs text-slate-400">Savol ekranda ko‘rinib turganini tekshiring.</p>
+            </div>
+            {/* Auto solve toggle */}
           <button
             onClick={() => setAutoSolveActive(!autoSolveActive)}
             className={`w-full sm:w-auto flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
@@ -376,42 +377,43 @@ export const ScreenSharePanel: React.FC<Props> = ({
             {autoSolveActive ? (
               <>
                 <Pause className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
-                <span>Auto-Solve Active (Every 3s)</span>
+                <span>Avto-tahlil yoqilgan · har 10 soniyada</span>
               </>
             ) : (
               <>
                 <Play className="w-3.5 h-3.5" />
-                <span>Turn ON Auto-Solve (Every 3s)</span>
+                <span>Avto-tahlilni yoqish</span>
               </>
             )}
           </button>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] items-stretch gap-2.5">
             {/* Stop button */}
             <button
               onClick={stopScreenShare}
               disabled={isLoading}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+              className="order-2 sm:order-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-semibold transition-colors cursor-pointer"
             >
               <Square className="w-3.5 h-3.5 text-rose-400 fill-rose-400" />
-              <span>{t.stopScreenShare}</span>
+              <span>Ulashishni to‘xtatish</span>
             </button>
 
-            {/* Analyze Current Screen button (< 3s) */}
+            {/* Main action: analyze the currently shared frame */}
             <button
               onClick={handleCaptureAndAnalyze}
               disabled={isLoading}
-              className="flex-2 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-indigo-600 to-violet-600 hover:from-amber-400 hover:to-violet-500 text-white text-xs sm:text-sm font-extrabold transition-all shadow-xl shadow-indigo-600/40 active:scale-[0.98] cursor-pointer disabled:opacity-50"
+              className="order-1 sm:order-2 w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-indigo-600 to-violet-600 hover:from-amber-300 hover:via-indigo-500 hover:to-violet-500 text-white text-base font-extrabold transition-all shadow-xl shadow-indigo-600/30 active:scale-[0.99] cursor-pointer disabled:opacity-60 disabled:cursor-wait min-h-[54px]"
             >
               {isLoading ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Solving ({elapsedSeconds}s)...</span>
+                  <span>Tahlil qilinmoqda · {elapsedSeconds}s</span>
                 </>
               ) : (
                 <>
                   <Zap className="w-4 h-4 fill-amber-300 text-amber-300" />
-                  <span>Analyze Screen (&lt;5s goal)</span>
+                  <span>Tahlil qilish</span>
                 </>
               )}
             </button>
