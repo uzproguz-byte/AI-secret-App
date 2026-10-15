@@ -324,7 +324,7 @@ export default function App() {
                 <Monitor className="w-4 h-4 text-cyan-300" />
                 <span className="truncate">Screen Share</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/30 text-amber-300 hidden sm:inline">
-                  ⚡ &lt;5s goal
+                  ⚡ Tez rejim
                 </span>
               </button>
 
@@ -459,7 +459,7 @@ export default function App() {
                 </div>
 
                 <span className="text-[11px] text-slate-500">
-                  Target speed: Under 5 seconds
+                  Tez rejim yoqilgan · natija savol va tarmoqqa bog‘liq
                 </span>
               </div>
             )}
