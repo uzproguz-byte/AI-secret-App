@@ -25,20 +25,28 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Reuse one Gemini client so requests can reuse pooled network connections.
+let cachedGeminiClient: GoogleGenAI | null = null;
+
 // Helper to get Gemini Client
 function getGeminiClient(): GoogleGenAI {
+  if (cachedGeminiClient) return cachedGeminiClient;
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY is not configured on the server. Please ensure the API key is set in environment secrets.');
   }
-  return new GoogleGenAI({
+  cachedGeminiClient = new GoogleGenAI({
     apiKey,
+    apiVersion: 'v1beta',
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build',
       },
     },
   });
+
+  return cachedGeminiClient;
 }
 
 // Fast in-memory cache to serve identical questions instantly and protect free-tier quota
@@ -109,6 +117,11 @@ app.post('/api/analyze', async (req, res) => {
         inlineData: {
           mimeType,
           data: base64Data,
+        },
+        // Fast Mode trades some fine detail for lower vision-processing latency.
+        // Disable fastMode in the request to retain high-resolution image analysis.
+        mediaResolution: {
+          level: fastMode ? 'media_resolution_medium' : 'media_resolution_high',
         },
       });
     }
