@@ -324,7 +324,7 @@ export default function App() {
                 <Monitor className="w-4 h-4 text-cyan-300" />
                 <span className="truncate">Screen Share</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/30 text-amber-300 hidden sm:inline">
-                  ⚡ &lt;3s
+                  ⚡ &lt;5s goal
                 </span>
               </button>
 
