@@ -1,0 +1,11 @@
+{
+  "name": "AI Study Assistant",
+  "description": "Multilingual AI education and practice assistant with live screen sharing, vision question solver, step-by-step reasoning, and multiple-choice detection.",
+  "requestFramePermissions": [
+    "display-capture",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
