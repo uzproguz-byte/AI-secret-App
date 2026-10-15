@@ -248,7 +248,7 @@ export const CameraScanner: React.FC<Props> = ({
               <span>LIVE</span>
             </span>
             <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-slate-950/80 backdrop-blur-md border border-slate-700/80 text-indigo-300">
-              ⚡ &lt;3s solve
+              ⚡ &lt;5s goal solve
             </span>
           </div>
 
@@ -336,7 +336,7 @@ export const CameraScanner: React.FC<Props> = ({
               <Camera className="w-5 h-5" />
               <span>{t.cameraSnap}</span>
               <span className="text-xs font-mono font-normal opacity-90 px-2 py-0.5 rounded-full bg-black/20">
-                ⚡ &lt;3s
+                ⚡ &lt;5s goal
               </span>
             </>
           )}
