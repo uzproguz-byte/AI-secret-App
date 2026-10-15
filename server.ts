@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { createHash } from 'node:crypto';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 
 dotenv.config();
@@ -72,9 +73,11 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     // Check fast cache first
-    const cacheKey = `${language}_${subject}_${selectedQuestionIndex}_${
-      text ? text.trim().slice(0, 160) : ''
-    }_${image ? image.slice(0, 80) + image.length : ''}`;
+    const inputFingerprint = createHash('sha256')
+      .update(image ? `image:${image}` : `text:${(text || '').trim()}`)
+      .digest('hex')
+      .slice(0, 32);
+    const cacheKey = `${language}_${subject}_${selectedQuestionIndex}_${inputFingerprint}`;
 
     const cachedEntry = fastCache.get(cacheKey);
     if (cachedEntry && Date.now() - cachedEntry.timestamp < 3600000) {
@@ -121,7 +124,7 @@ app.post('/api/analyze', async (req, res) => {
         // Fast Mode trades some fine detail for lower vision-processing latency.
         // Disable fastMode in the request to retain high-resolution image analysis.
         mediaResolution: {
-          level: fastMode ? 'MEDIA_RESOLUTION_MEDIUM' : 'MEDIA_RESOLUTION_HIGH',
+          level: fastMode ? 'MEDIA_RESOLUTION_LOW' : 'MEDIA_RESOLUTION_HIGH',
         },
       });
     }
@@ -149,9 +152,11 @@ OUTPUT INSTRUCTIONS:
 1. Read only the question or questions actually visible in the supplied image/text. Never invent other questions.
 2. Identify the correct answer and explain it briefly in the requested language.
 3. Keep the output compact: at most 3 short explanation steps and one short summary sentence.
-4. If there is only one question, set multipleQuestionsFound to false and omit allQuestionsSummary.
-5. Return the required JSON fields only. Never place the full JSON response or field names inside correctAnswerText or summaryExplanation.
-6. For a direct-answer question, put only the answer in correctAnswerText and use "Direct Answer" as correctAnswerLabel.
+4. If multiple questions are clearly visible, set multipleQuestionsFound to true and include a short allQuestionsSummary; otherwise omit it and use false.
+5. Return only fields needed for a concise answer. Do not emit empty optional fields or verbose metadata.
+6. Keep stepByStepExplanation to 1-2 short steps and summaryExplanation to one sentence.
+7. Never put JSON or field names inside correctAnswerText or summaryExplanation.
+8. For a direct-answer question, put only the answer in correctAnswerText and use "Direct Answer" as correctAnswerLabel.
 `;
 
     parts.push({ text: promptText });
@@ -168,6 +173,7 @@ OUTPUT INSTRUCTIONS:
       for (let attempt = 1; attempt <= 1; attempt++) {
         try {
           console.log(`[AI Solver] Calling ${modelName} (attempt ${attempt})...`);
+          const geminiStartedAt = Date.now();
           const response = await ai.models.generateContent({
             model: modelName,
             contents: { parts },
@@ -281,17 +287,8 @@ OUTPUT INSTRUCTIONS:
                 },
               },
               required: [
-                'multipleQuestionsFound',
                 'questionText',
-                'detectedSubject',
-                'detectedLanguage',
-                'isMultipleChoice',
-                'options',
-                'correctAnswerLabel',
                 'correctAnswerText',
-                'confidence',
-                'confidenceScore',
-                'stepByStepExplanation',
                 'summaryExplanation',
               ],
             },
@@ -300,6 +297,7 @@ OUTPUT INSTRUCTIONS:
 
         if (response.text) {
           responseText = response.text;
+          console.log(`[AI Solver] Gemini ${modelName} responded in ${((Date.now() - geminiStartedAt) / 1000).toFixed(2)}s`);
           break;
         }
       } catch (err: any) {
@@ -390,15 +388,21 @@ OUTPUT INSTRUCTIONS:
         typeof parsedData.correctAnswerText !== 'string' ||
         !parsedData.correctAnswerText.trim() ||
         typeof parsedData.questionText !== 'string' ||
-        typeof parsedData.summaryExplanation !== 'string' ||
-        !Array.isArray(parsedData.stepByStepExplanation)
+        typeof parsedData.summaryExplanation !== 'string'
       ) {
         throw new Error('Gemini response is missing required answer fields');
       }
 
-      // Normalize optional fields so the UI can safely display any valid answer.
+      // Normalize omitted optional fields so compact fast-mode JSON remains UI-safe.
       if (!Array.isArray(parsedData.options)) parsedData.options = [];
       if (!Array.isArray(parsedData.keyConcepts)) parsedData.keyConcepts = [];
+      if (!Array.isArray(parsedData.stepByStepExplanation)) parsedData.stepByStepExplanation = [];
+      if (typeof parsedData.multipleQuestionsFound !== 'boolean') parsedData.multipleQuestionsFound = false;
+      if (typeof parsedData.isMultipleChoice !== 'boolean') parsedData.isMultipleChoice = parsedData.options.length > 0;
+      if (typeof parsedData.detectedSubject !== 'string' || !parsedData.detectedSubject.trim()) parsedData.detectedSubject = subject === 'auto' ? 'General' : subject;
+      if (typeof parsedData.detectedLanguage !== 'string' || !parsedData.detectedLanguage.trim()) parsedData.detectedLanguage = language === 'auto' ? 'Detected' : language;
+      if (typeof parsedData.confidence !== 'string' || !parsedData.confidence.trim()) parsedData.confidence = 'MEDIUM';
+      if (!Number.isFinite(parsedData.confidenceScore)) parsedData.confidenceScore = 70;
       if (typeof parsedData.correctAnswerLabel !== 'string' || !parsedData.correctAnswerLabel.trim()) {
         parsedData.correctAnswerLabel = 'Direct Answer';
       }
