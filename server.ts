@@ -133,9 +133,12 @@ SPEED & ACCURACY RULE:
 ${text ? `QUESTION CONTENT:\n${text}` : ''}
 
 OUTPUT INSTRUCTIONS:
-1. Detect question text and multiple-choice options (A, B, C, D).
-2. Identify the single correct choice label (e.g. "B") and exact text.
-3. Provide 2 concise solution steps and 1 clear summary sentence in the target language.
+1. Read only the question or questions actually visible in the supplied image/text. Never invent other questions.
+2. Identify the correct answer and explain it briefly in the requested language.
+3. Keep the output compact: at most 3 short explanation steps and one short summary sentence.
+4. If there is only one question, set multipleQuestionsFound to false and omit allQuestionsSummary.
+5. Return the required JSON fields only. Never place the full JSON response or field names inside correctAnswerText or summaryExplanation.
+6. For a direct-answer question, put only the answer in correctAnswerText and use "Direct Answer" as correctAnswerLabel.
 `;
 
     parts.push({ text: promptText });
@@ -158,7 +161,7 @@ OUTPUT INSTRUCTIONS:
             config: {
               systemInstruction,
               thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-              maxOutputTokens: 600,
+              maxOutputTokens: 1200,
               responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -341,28 +344,59 @@ OUTPUT INSTRUCTIONS:
       return JSON.parse(text);
     }
 
-    let parsedData: any = null;
+    let parsedData: any;
     try {
       parsedData = extractJson(responseText);
+      if (!parsedData || typeof parsedData !== 'object' || Array.isArray(parsedData)) {
+        throw new Error('Gemini response was not a JSON object');
+      }
+
+      // A truncated or malformed model response must never be presented as the answer.
+      const answerText = typeof parsedData.correctAnswerText === 'string'
+        ? parsedData.correctAnswerText.trim()
+        : '';
+      const looksLikeNestedJson = answerText.startsWith('{') &&
+        /["']?(multipleQuestionsFound|questionText|correctAnswerText)["']?\s*:/.test(answerText);
+
+      if (looksLikeNestedJson) {
+        try {
+          const nested = extractJson(answerText);
+          if (nested && typeof nested === 'object' &&
+              typeof nested.correctAnswerText === 'string' &&
+              typeof nested.questionText === 'string') {
+            parsedData = nested;
+          } else {
+            throw new Error('Nested model response did not contain an answer');
+          }
+        } catch {
+          throw new Error('Gemini placed malformed JSON inside the answer field');
+        }
+      }
+
+      if (
+        typeof parsedData.correctAnswerText !== 'string' ||
+        !parsedData.correctAnswerText.trim() ||
+        typeof parsedData.questionText !== 'string' ||
+        typeof parsedData.summaryExplanation !== 'string' ||
+        !Array.isArray(parsedData.stepByStepExplanation)
+      ) {
+        throw new Error('Gemini response is missing required answer fields');
+      }
+
+      // Normalize optional fields so the UI can safely display any valid answer.
+      if (!Array.isArray(parsedData.options)) parsedData.options = [];
+      if (!Array.isArray(parsedData.keyConcepts)) parsedData.keyConcepts = [];
+      if (typeof parsedData.correctAnswerLabel !== 'string' || !parsedData.correctAnswerLabel.trim()) {
+        parsedData.correctAnswerLabel = 'Direct Answer';
+      }
+      if (typeof parsedData.isUnclear !== 'boolean') parsedData.isUnclear = false;
     } catch (parseErr) {
-      console.warn('[AI Solver] Failed to parse JSON, building clean fallback:', parseErr);
-      parsedData = {
-        questionText: text || 'Question from screen capture',
-        detectedSubject: subject !== 'auto' ? subject : 'General',
-        detectedLanguage: language !== 'auto' ? language : 'English',
-        isMultipleChoice: false,
-        options: [],
-        correctAnswerLabel: 'Answer',
-        correctAnswerText: responseText.replace(/```[a-z]*|```/gi, '').slice(0, 300),
-        confidence: 'HIGH',
-        confidenceScore: 95,
-        stepByStepExplanation: [
-          'Evaluated the screen capture visual layout and symbols.',
-          'Synthesized the direct solution.',
-        ],
-        summaryExplanation: responseText.replace(/```[a-z]*|```/gi, '').slice(0, 400),
-        activeQuestionIndex: selectedQuestionIndex,
-      };
+      console.warn('[AI Solver] Failed to parse a complete answer JSON:', parseErr);
+      return res.status(502).json({
+        success: false,
+        isIncompleteResponse: true,
+        error: 'Gemini returned an incomplete answer. Please try again.',
+      });
     }
 
     const durationMs = Date.now() - startTime;
