@@ -121,7 +121,7 @@ app.post('/api/analyze', async (req, res) => {
         // Fast Mode trades some fine detail for lower vision-processing latency.
         // Disable fastMode in the request to retain high-resolution image analysis.
         mediaResolution: {
-          level: fastMode ? 'media_resolution_medium' : 'media_resolution_high',
+          level: fastMode ? 'MEDIA_RESOLUTION_MEDIUM' : 'MEDIA_RESOLUTION_HIGH',
         },
       });
     }
