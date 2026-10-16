@@ -248,7 +248,7 @@ OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
                   keyConcepts: { type: Type.ARRAY, items: { type: Type.STRING } },
                   diagramDescription: { type: Type.STRING },
                 },
-                required: ['questionText', 'correctAnswerText', 'summaryExplanation'],
+                required: ['questionText', 'correctAnswerText', 'summaryExplanation', 'correctAnswerLabel', 'isMultipleChoice', 'options', 'isUnclear', 'confidence', 'confidenceScore'],
               },
             },
           });
