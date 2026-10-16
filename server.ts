@@ -169,9 +169,40 @@ OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
 
     parts.push({ text: promptText });
 
-    const systemInstruction = `You are a careful single-question visual solver. Return concise, accurate structured JSON. Separate question blocks using the visible question heading: options above a heading may belong to the previous question, and options below the next heading belong to that next question. Never mix them. For a clear multiple-choice answer, provide the exact option label and text, and mark exactly that option isCorrect=true. If question boundaries or any needed choices are ambiguous, set isUnclear=true, confidence="LOW", confidenceScore at most 20, correctAnswerLabel="Unclear", options=[], and explain that the screenshot must show one complete question. Accuracy is more important than guessing.`;
+    const systemInstruction = requiresScreenshotBoxes
+      ? `You solve one visible multiple-choice practice question from a screenshot. Be concise and fast. Keep choices within the same question. Return exact correctAnswerLabel and mark exactly one option isCorrect=true only when clear. For EVERY visible choice belonging to that question, return box2d=[ymin,xmin,ymax,xmax] normalized 0..1000 for the full screenshot, tightly enclosing its whole clickable row/card. All choices must have coordinates. Never invent coordinates. If uncertain, set isUnclear=true, confidence="LOW", confidenceScore<=20, options=[].`
+      : `You are a careful single-question visual solver. Return concise, accurate structured JSON. Separate question blocks using the visible question heading: options above a heading may belong to the previous question, and options below the next heading belong to that next question. Never mix them. For a clear multiple-choice answer, provide the exact option label and text, and mark exactly that option isCorrect=true. If question boundaries or any needed choices are ambiguous, set isUnclear=true, confidence="LOW", confidenceScore at most 20, correctAnswerLabel="Unclear", options=[], and explain that the screenshot must show one complete question. Accuracy is more important than guessing.`;
 
     // Use the latest stable Flash model first, then fall back if it is overloaded.
+    // Compact schema for the extension: only fields it uses, including required option coordinates.
+    const extensionResponseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        questionText: { type: Type.STRING },
+        correctAnswerText: { type: Type.STRING },
+        correctAnswerLabel: { type: Type.STRING },
+        summaryExplanation: { type: Type.STRING },
+        isMultipleChoice: { type: Type.BOOLEAN },
+        isUnclear: { type: Type.BOOLEAN },
+        confidence: { type: Type.STRING },
+        confidenceScore: { type: Type.INTEGER },
+        options: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              label: { type: Type.STRING },
+              text: { type: Type.STRING },
+              isCorrect: { type: Type.BOOLEAN },
+              box2d: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+            },
+            required: ['label', 'text', 'isCorrect', 'box2d'],
+          },
+        },
+      },
+      required: ['questionText', 'correctAnswerText', 'correctAnswerLabel', 'summaryExplanation', 'isMultipleChoice', 'isUnclear', 'confidence', 'confidenceScore', 'options'],
+    };
+
     // The extension's screenshot loop must be quick and predictable. Use one low-latency
     // model for coordinate-rich visual scans; retain fallback models for normal website requests.
     const candidateModels = requiresScreenshotBoxes
@@ -207,10 +238,10 @@ OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
             contents: { parts },
             config: {
               systemInstruction,
-              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+              thinkingConfig: { thinkingLevel: requiresScreenshotBoxes ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW },
               maxOutputTokens: requiresScreenshotBoxes ? 420 : 1024,
               responseMimeType: 'application/json',
-              responseSchema: {
+              responseSchema: requiresScreenshotBoxes ? extensionResponseSchema : {
                 type: Type.OBJECT,
                 properties: {
                   multipleQuestionsFound: { type: Type.BOOLEAN },
