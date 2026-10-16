@@ -66,6 +66,8 @@ app.post('/api/analyze', async (req, res) => {
       fastMode = true,
     } = req.body;
 
+    const requiresScreenshotBoxes = Boolean(image && typeof text === 'string' && text.includes('[AI_SECRET_SCREEN_FALLBACK]'));
+
     if (!image && (!text || !text.trim())) {
       return res.status(400).json({
         error: 'Please provide an image (screen capture/upload/camera) or enter a text question.',
@@ -147,6 +149,8 @@ SPEED & ACCURACY RULE:
 - Subject: ${subject}
 - Focus Question Index: ${selectedQuestionIndex}
 ${text ? `QUESTION CONTENT:\n${text}` : ''}
+${requiresScreenshotBoxes ? `
+SCREENSHOT ANSWER GEOMETRY (MANDATORY): Because this is the AI Secret extension's visible-screen fallback, populate box2d for EVERY visible answer option as [ymin, xmin, ymax, xmax], normalized from 0 to 1000 relative to the full screenshot (not CSS pixels). Enclose each option row/card/answer text tightly. Use the same coordinate convention for every option. The correct option's box2d must point to that exact visible option. Do not invent coordinates for off-screen or unclear options; if boundaries cannot be separated set isUnclear=true and options=[].` : ''}
 
 OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
 1. Answer exactly ONE target question per image. Identify question headings first, then group the text and options that appear AFTER that question heading and BEFORE the next question heading.
@@ -233,7 +237,7 @@ OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
                         isCorrect: { type: Type.BOOLEAN },
                         box2d: { type: Type.ARRAY, items: { type: Type.INTEGER } },
                       },
-                      required: ['label', 'text', 'isCorrect'],
+                      required: requiresScreenshotBoxes ? ['label', 'text', 'isCorrect', 'box2d'] : ['label', 'text', 'isCorrect'],
                     },
                   },
                   correctAnswerLabel: { type: Type.STRING },
