@@ -17,9 +17,50 @@ import {
 import { TranslationDictionary } from '../translations';
 import { AnalysisResult } from '../types';
 
+const SIGNATURE_WIDTH = 32;
+const SIGNATURE_HEIGHT = 18;
+
+// A tiny grayscale signature lets us detect meaningful page changes without
+// uploading every frame. It deliberately ignores tiny cursor/blink changes.
+function captureVisualSignature(video: HTMLVideoElement | null): number[] | null {
+  if (!video || video.videoWidth < 20 || video.videoHeight < 20) return null;
+
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = SIGNATURE_WIDTH;
+    canvas.height = SIGNATURE_HEIGHT;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    context.drawImage(video, 0, 0, SIGNATURE_WIDTH, SIGNATURE_HEIGHT);
+    const pixels = context.getImageData(0, 0, SIGNATURE_WIDTH, SIGNATURE_HEIGHT).data;
+    const signature: number[] = [];
+    for (let i = 0; i < pixels.length; i += 4) {
+      signature.push(Math.round((pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114) / 8) * 8);
+    }
+    return signature;
+  } catch {
+    return null;
+  }
+}
+
+function compareVisualSignatures(a: number[], b: number[]) {
+  if (a.length !== b.length || !a.length) return { changedRatio: 1, meanDelta: 255 };
+  let changed = 0;
+  let totalDelta = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    const delta = Math.abs(a[i] - b[i]);
+    if (delta >= 24) changed += 1;
+    totalDelta += delta;
+  }
+  return {
+    changedRatio: changed / a.length,
+    meanDelta: totalDelta / a.length,
+  };
+}
+
 interface Props {
   t: TranslationDictionary;
-  onAnalyzeFrame: (imageDataUrl: string) => void;
+  onAnalyzeFrame: (imageDataUrl: string, fastMode?: boolean) => void;
   isLoading: boolean;
   currentResult?: AnalysisResult | null;
   elapsedSeconds?: number;
@@ -36,21 +77,22 @@ export const ScreenSharePanel: React.FC<Props> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const autoScanTimerRef = useRef<any>(null);
+  const baselineSignatureRef = useRef<number[] | null>(null);
+  const autoAnalysisInFlightRef = useRef(false);
+  const previousLoadingRef = useRef(false);
 
   const [isSharing, setIsSharing] = useState<boolean>(false);
   const [streamResolution, setStreamResolution] = useState<{ width: number; height: number } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
   const [autoSolveActive, setAutoSolveActive] = useState<boolean>(false);
+  const [autoQuestionCount, setAutoQuestionCount] = useState<number>(0);
 
   // Stop sharing cleanup
   const stopScreenShare = useCallback(() => {
-    if (autoScanTimerRef.current) {
-      clearInterval(autoScanTimerRef.current);
-      autoScanTimerRef.current = null;
-    }
     setAutoSolveActive(false);
+    baselineSignatureRef.current = null;
+    autoAnalysisInFlightRef.current = false;
 
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -126,78 +168,126 @@ export const ScreenSharePanel: React.FC<Props> = ({
     }
   };
 
-  // Ultra-fast frame capture (< 10ms execution, < 3s solve target)
-  const handleCaptureAndAnalyze = useCallback(() => {
-    if (!videoRef.current || !streamRef.current || isLoading) return;
+  // Capture a high-detail frame for accuracy on small answer choices.
+  const handleCaptureAndAnalyze = useCallback((autoTriggered = false) => {
+    if (!videoRef.current || !streamRef.current || isLoading) {
+      if (autoTriggered) autoAnalysisInFlightRef.current = false;
+      return;
+    }
 
     try {
       const video = videoRef.current;
       if (!video.videoWidth || !video.videoHeight || video.videoWidth < 20 || video.videoHeight < 20) {
-        setErrorMessage('Waiting for screen stream to render active pixels. Please ensure the shared window is open and visible.');
+        setErrorMessage('The shared screen is not ready yet. Wait for the question to appear, then try again.');
+        if (autoTriggered) autoAnalysisInFlightRef.current = false;
         return;
+      }
+
+      // If the user manually analyzes while Solve Page is watching, treat this
+      // frame as the current question so it is not immediately analyzed twice.
+      if (!autoTriggered && autoSolveActive) {
+        baselineSignatureRef.current = captureVisualSignature(video);
       }
 
       const rawW = video.videoWidth;
       const rawH = video.videoHeight;
-
-      // Fast-solve geometry: scale to max dimension of 1080px with 0.76 quality
-      // Drops upload payload to ~60KB so analysis finishes in under 2.5 seconds!
-      const maxDim = 1080;
-      let targetW = rawW;
-      let targetH = rawH;
-      if (rawW > maxDim || rawH > maxDim) {
-        if (rawW > rawH) {
-          targetH = Math.round((rawH * maxDim) / rawW);
-          targetW = maxDim;
-        } else {
-          targetW = Math.round((rawW * maxDim) / rawH);
-          targetH = maxDim;
-        }
-      }
+      const maxDim = 1440;
+      const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
+      const targetW = Math.max(1, Math.round(rawW * scale));
+      const targetH = Math.max(1, Math.round(rawH * scale));
 
       const canvas = document.createElement('canvas');
       canvas.width = targetW;
       canvas.height = targetH;
-
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        setErrorMessage('Failed to initialize 2D canvas context for frame capture.');
+        setErrorMessage('Could not prepare the screenshot. Please try again.');
+        if (autoTriggered) autoAnalysisInFlightRef.current = false;
         return;
       }
 
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'medium';
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(video, 0, 0, targetW, targetH);
 
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.76);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
       setCapturedPreview(dataUrl);
-      onAnalyzeFrame(dataUrl);
+      setErrorMessage(null);
+      if (autoTriggered) setAutoQuestionCount((count) => count + 1);
+      // Higher vision resolution is intentional: it helps separate adjacent questions
+      // and read small option labels. The server still returns quickly where possible.
+      onAnalyzeFrame(dataUrl, false);
     } catch (err: any) {
       console.error('Frame capture error:', err);
-      setErrorMessage('Could not capture frame from video stream.');
+      setErrorMessage('Could not capture the shared screen. Please try again.');
+      if (autoTriggered) autoAnalysisInFlightRef.current = false;
     }
-  }, [isLoading, onAnalyzeFrame]);
+  }, [isLoading, onAnalyzeFrame, autoSolveActive]);
 
-  // Schedule the next automatic scan only after the current analysis finishes.
-  // This avoids duplicate calls while Gemini is still processing a frame.
+  // Release the auto-solve lock only after the current AI request has finished.
+  // Keep the old baseline so a question change that happens during analysis is not missed.
   useEffect(() => {
-    if (autoScanTimerRef.current) {
-      clearTimeout(autoScanTimerRef.current);
-      autoScanTimerRef.current = null;
+    if (isLoading) {
+      previousLoadingRef.current = true;
+      return;
     }
+    if (previousLoadingRef.current) {
+      previousLoadingRef.current = false;
+      autoAnalysisInFlightRef.current = false;
+    }
+  }, [isLoading]);
 
+  // Solve Page: analyze the first visible question, then only analyze again when
+  // the shared page visibly changes and remains stable. No repeated API calls
+  // on the same question, and no accidental use of an adjacent question's option.
+  useEffect(() => {
     if (!autoSolveActive || !isSharing || isLoading) return;
 
-    autoScanTimerRef.current = setTimeout(() => {
-      handleCaptureAndAnalyze();
-    }, 10000);
+    let candidateSignature: number[] | null = null;
+    let candidateSince = 0;
 
-    return () => {
-      if (autoScanTimerRef.current) {
-        clearTimeout(autoScanTimerRef.current);
-        autoScanTimerRef.current = null;
+    const timer = window.setInterval(() => {
+      if (isLoading || autoAnalysisInFlightRef.current) return;
+
+      const signature = captureVisualSignature(videoRef.current);
+      if (!signature) return;
+
+      if (!baselineSignatureRef.current) {
+        baselineSignatureRef.current = signature;
+        return;
       }
-    };
+
+      const change = compareVisualSignatures(signature, baselineSignatureRef.current);
+      const isMeaningfulChange = change.changedRatio >= 0.055 && change.meanDelta >= 10;
+      if (!isMeaningfulChange) {
+        candidateSignature = null;
+        candidateSince = 0;
+        return;
+      }
+
+      if (!candidateSignature) {
+        candidateSignature = signature;
+        candidateSince = Date.now();
+        return;
+      }
+
+      const stability = compareVisualSignatures(signature, candidateSignature);
+      if (stability.changedRatio > 0.025 || stability.meanDelta > 8) {
+        candidateSignature = signature;
+        candidateSince = Date.now();
+        return;
+      }
+
+      if (Date.now() - candidateSince >= 1000) {
+        baselineSignatureRef.current = signature;
+        candidateSignature = null;
+        candidateSince = 0;
+        autoAnalysisInFlightRef.current = true;
+        handleCaptureAndAnalyze(true);
+      }
+    }, 700);
+
+    return () => window.clearInterval(timer);
   }, [autoSolveActive, isSharing, isLoading, handleCaptureAndAnalyze]);
 
   // Clean up on unmount
@@ -365,34 +455,54 @@ export const ScreenSharePanel: React.FC<Props> = ({
               <p className="text-sm font-bold text-white">Ekran tayyor</p>
               <p className="text-xs text-slate-400">Savol ekranda ko‘rinib turganini tekshiring.</p>
             </div>
-            {/* Auto solve toggle */}
+            {/* Solve Page: scan the current visible question, then detect changed questions. */}
           <button
-            onClick={() => setAutoSolveActive(!autoSolveActive)}
-            className={`w-full sm:w-auto flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+            onClick={() => {
+              if (autoSolveActive) {
+                setAutoSolveActive(false);
+                baselineSignatureRef.current = null;
+                setErrorMessage(null);
+                return;
+              }
+              baselineSignatureRef.current = captureVisualSignature(videoRef.current);
+              autoAnalysisInFlightRef.current = true;
+              setAutoQuestionCount(0);
+              setAutoSolveActive(true);
+              handleCaptureAndAnalyze(true);
+            }}
+            disabled={isLoading && !autoSolveActive}
+            className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm font-extrabold transition-all cursor-pointer ${
               autoSolveActive
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md'
-                : 'bg-slate-800/80 text-slate-300 hover:text-white border-slate-700/80'
+                ? 'bg-rose-500/15 text-rose-300 border-rose-500/50 shadow-md'
+                : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 border-emerald-400/50 shadow-lg shadow-emerald-600/20 hover:from-emerald-400 hover:to-teal-400'
             }`}
           >
             {autoSolveActive ? (
               <>
-                <Pause className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
-                <span>Avto-tahlil yoqilgan · har 10 soniyada</span>
+                <Pause className="w-4 h-4 fill-rose-300 text-rose-300" />
+                <span>Stop Solve Page</span>
               </>
             ) : (
               <>
-                <Play className="w-3.5 h-3.5" />
-                <span>Avto-tahlilni yoqish</span>
+                <Play className="w-4 h-4 fill-current" />
+                <span>Solve Page</span>
               </>
             )}
           </button>
 
           </div>
+          {autoSolveActive && (
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-3.5 py-3 text-xs text-emerald-100/90">
+              <p className="font-bold">Solve Page is watching · {autoQuestionCount} scan{autoQuestionCount === 1 ? '' : 's'} started</p>
+              <p className="mt-1 text-emerald-100/70">
+                It checks the current question first, then analyzes only after the shared screen changes and settles. Scroll to the next question yourself; a screen-share website cannot click or scroll the other tab.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] items-stretch gap-2.5">
             {/* Stop button */}
             <button
               onClick={stopScreenShare}
-              disabled={isLoading}
               className="order-2 sm:order-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-semibold transition-colors cursor-pointer"
             >
               <Square className="w-3.5 h-3.5 text-rose-400 fill-rose-400" />
