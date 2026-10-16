@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Screen Assistant</title>
+  <link rel="stylesheet" href="share.css">
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div class="brand"><div class="mark">AI</div><div><h1>Screen Assistant</h1><p>Fast answers from your screen</p></div></div>
+      <span id="liveBadge" class="badge">Not sharing</span>
+    </header>
+    <section class="preview-wrap">
+      <video id="preview" autoplay muted playsinline></video>
+      <div id="placeholder" class="placeholder"><div class="screen-icon">▣</div><strong>Your screen preview</strong><span>Start sharing to choose a tab, window, or screen.</span></div>
+    </section>
+    <div class="controls">
+      <button id="share" class="primary">Share screen</button>
+      <button id="analyze" class="secondary" disabled>Analyze screen</button>
+      <label class="auto"><input type="checkbox" id="auto" disabled> Auto-analyze every 15 seconds</label>
+      <button id="stop" class="stop" disabled>Stop sharing</button>
+    </div>
+    <section class="answer-card">
+      <div class="answer-heading"><span>ANSWER</span><span id="duration"></span></div>
+      <div id="answer" class="answer empty">Your answer will appear here.</div>
+      <p id="status" class="status" role="status"></p>
+    </section>
+    <p class="privacy">Your live video stays in this window. Only a still frame is sent to the AI server when you analyze. Stop sharing any time.</p>
+  </main>
+  <script src="share.js"></script>
+</body>
+</html>
