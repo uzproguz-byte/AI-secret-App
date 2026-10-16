@@ -1,18 +1,12 @@
 const API_URL = 'https://ai-secret-app-production.up.railway.app/api/analyze';
 
 const preview = document.getElementById('preview');
-const placeholder = document.getElementById('placeholder');
-const shareButton = document.getElementById('share');
-const analyzeButton = document.getElementById('analyze');
-const stopButton = document.getElementById('stop');
-const autoCheckbox = document.getElementById('auto');
+const mainAction = document.getElementById('mainAction');
 const answerElement = document.getElementById('answer');
 const statusElement = document.getElementById('status');
 const liveBadge = document.getElementById('liveBadge');
-const durationElement = document.getElementById('duration');
 
 let stream = null;
-let autoTimer = null;
 let requestInProgress = false;
 
 function setStatus(message, isError = false) {
@@ -21,12 +15,8 @@ function setStatus(message, isError = false) {
 }
 
 function setSharingUI(active) {
-  shareButton.disabled = active;
-  analyzeButton.disabled = !active;
-  stopButton.disabled = !active;
-  autoCheckbox.disabled = !active;
-  preview.classList.toggle('visible', active);
-  placeholder.style.display = active ? 'none' : 'flex';
+  mainAction.textContent = active ? 'Analyze screen' : 'Share screen';
+  mainAction.disabled = Boolean(active && requestInProgress);
   liveBadge.textContent = active ? '● Sharing' : 'Not sharing';
   liveBadge.classList.toggle('live', active);
 }
@@ -34,7 +24,7 @@ function setSharingUI(active) {
 async function startSharing() {
   setStatus('');
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-    setStatus('Screen sharing is not supported in this Chrome context. Update Chrome and try again.', true);
+    setStatus('Screen sharing is not supported here. Update Chrome and try again.', true);
     return;
   }
 
@@ -45,11 +35,16 @@ async function startSharing() {
     });
     preview.srcObject = stream;
     await preview.play();
+
     const track = stream.getVideoTracks()[0];
     if (track) track.addEventListener('ended', stopSharing, { once: true });
+
     setSharingUI(true);
-    setStatus('Screen is shared. Click Analyze screen when the question is visible.');
+    setStatus('Screen shared. Click Analyze screen when the question is visible.');
   } catch (error) {
+    if (stream) stream.getTracks().forEach((track) => track.stop());
+    stream = null;
+    setSharingUI(false);
     if (error && error.name === 'NotAllowedError') {
       setStatus('Screen sharing was cancelled or permission was denied.', true);
     } else {
@@ -60,7 +55,7 @@ async function startSharing() {
 
 function captureFrame() {
   if (!stream || !preview.videoWidth || !preview.videoHeight) {
-    throw new Error('Wait for the screen preview to appear, then try again.');
+    throw new Error('Wait a moment for screen sharing to start, then try again.');
   }
 
   const maxDimension = 1280;
@@ -71,16 +66,49 @@ function captureFrame() {
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Could not prepare the screenshot.');
   context.drawImage(preview, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.78);
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
+function normalizeLabel(value) {
+  const match = String(value || '').trim().match(/^(?:option\s*)?([A-Z0-9])(?:[\s).:,\-]|$)/i);
+  return match ? match[1].toUpperCase() : '';
+}
+
+function formatAnswer(result) {
+  const answerText = typeof result.correctAnswerText === 'string'
+    ? result.correctAnswerText.trim()
+    : '';
+  const options = Array.isArray(result.options) ? result.options : [];
+
+  const markedCorrect = options.filter((option) => option && option.isCorrect === true);
+  let selectedOption = markedCorrect.length === 1 ? markedCorrect[0] : null;
+  let label = selectedOption ? normalizeLabel(selectedOption.label) : '';
+
+  if (!selectedOption) {
+    label = normalizeLabel(result.correctAnswerLabel) || normalizeLabel(answerText);
+    selectedOption = options.find((option) => normalizeLabel(option && option.label) === label);
+  }
+
+  if (selectedOption && label && typeof selectedOption.text === 'string' && selectedOption.text.trim()) {
+    return label + ') ' + selectedOption.text.trim();
+  }
+
+  if (label && !/^direct answer$/i.test(String(result.correctAnswerLabel || '').trim()) &&
+      !new RegExp('^' + label + '(?:[).:\\s-]|$)', 'i').test(answerText)) {
+    return label + ') ' + answerText;
+  }
+
+  return answerText;
 }
 
 async function analyzeScreen() {
   if (requestInProgress || !stream) return;
+
   requestInProgress = true;
-  analyzeButton.disabled = true;
+  mainAction.disabled = true;
+  mainAction.textContent = 'Analyzing…';
   answerElement.classList.remove('empty');
   answerElement.textContent = 'Analyzing screen…';
-  durationElement.textContent = '';
   setStatus('');
 
   try {
@@ -103,13 +131,10 @@ async function analyzeScreen() {
     }
 
     const result = payload.data || payload;
-    const answer = typeof result.correctAnswerText === 'string'
-      ? result.correctAnswerText.trim()
-      : '';
-    if (!answer) throw new Error('The AI returned no answer. Try capturing a clearer screen.');
+    const answer = formatAnswer(result);
+    if (!answer) throw new Error('The AI returned no answer. Try a clearer screen.');
 
     answerElement.textContent = answer;
-    durationElement.textContent = ((result.durationMs || payload.durationMs || 0) / 1000).toFixed(1) + 's';
     setStatus('');
   } catch (error) {
     answerElement.classList.add('empty');
@@ -117,44 +142,30 @@ async function analyzeScreen() {
     setStatus((error && error.message) || 'Analysis failed. Please try again.', true);
   } finally {
     requestInProgress = false;
-    analyzeButton.disabled = !stream;
+    mainAction.disabled = !stream;
+    mainAction.textContent = stream ? 'Analyze screen' : 'Share screen';
   }
 }
 
 function stopSharing() {
-  if (autoTimer) {
-    clearInterval(autoTimer);
-    autoTimer = null;
-  }
-  autoCheckbox.checked = false;
   if (stream) {
-    stream.getTracks().forEach((track) => track.stop());
+    const oldStream = stream;
     stream = null;
+    oldStream.getTracks().forEach((track) => track.stop());
   }
   preview.srcObject = null;
   setSharingUI(false);
   setStatus('Screen sharing stopped.');
 }
 
-shareButton.addEventListener('click', startSharing);
-analyzeButton.addEventListener('click', analyzeScreen);
-stopButton.addEventListener('click', stopSharing);
-autoCheckbox.addEventListener('change', () => {
-  if (autoTimer) {
-    clearInterval(autoTimer);
-    autoTimer = null;
-  }
-  if (autoCheckbox.checked && stream) {
-    setStatus('Auto-analysis is on. It checks every 15 seconds; stay within your API quota.');
-    autoTimer = setInterval(() => {
-      if (!requestInProgress && stream) analyzeScreen();
-    }, 15000);
+mainAction.addEventListener('click', () => {
+  if (stream) {
+    analyzeScreen();
   } else {
-    setStatus('Auto-analysis is off.');
+    startSharing();
   }
 });
 
 window.addEventListener('beforeunload', () => {
-  if (autoTimer) clearInterval(autoTimer);
   if (stream) stream.getTracks().forEach((track) => track.stop());
 });
