@@ -163,16 +163,32 @@ OUTPUT INSTRUCTIONS:
 
     const systemInstruction = `You are a rapid-response educational AI tutor. Read the supplied image or text carefully and return concise, accurate structured JSON as quickly as possible. State uncertainty rather than guessing when key details are unreadable.`;
 
-    // Multi-model resilience pool with independent quota
-    const candidateModels = ['gemini-3.7-flash']; // Stable, low-latency multimodal model.
+    // Use the latest stable Flash model first, then fall back if it is overloaded.
+    const candidateModels = [
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.5-flash-lite',
+    ];
     let lastError: any = null;
     let responseText: string | null = null;
-    let detectedRetrySeconds = 25;
+    let detectedRetrySeconds = 3;
+    let sawRateLimit = false;
+    let sawUnavailable = false;
+
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const getStatusCode = (err: any): number | undefined => {
+      const raw = err?.status ?? err?.statusCode ?? err?.response?.status;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
 
     for (const modelName of candidateModels) {
-      for (let attempt = 1; attempt <= 1; attempt++) {
+      if (responseText) break;
+
+      // Retry a transient failure once with short backoff, then try the next model.
+      for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          console.log(`[AI Solver] Calling ${modelName} (attempt ${attempt})...`);
+          console.log('[AI Solver] Calling ' + modelName + ' (attempt ' + attempt + ')...');
           const geminiStartedAt = Date.now();
           const response = await ai.models.generateContent({
             model: modelName,
@@ -182,105 +198,107 @@ OUTPUT INSTRUCTIONS:
               thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
               maxOutputTokens: 384,
               responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                multipleQuestionsFound: { type: Type.BOOLEAN },
-                allQuestionsSummary: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      index: { type: Type.INTEGER },
-                      title: { type: Type.STRING },
-                      snippet: { type: Type.STRING },
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  multipleQuestionsFound: { type: Type.BOOLEAN },
+                  allQuestionsSummary: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        index: { type: Type.INTEGER },
+                        title: { type: Type.STRING },
+                        snippet: { type: Type.STRING },
+                      },
+                      required: ['index', 'title', 'snippet'],
                     },
-                    required: ['index', 'title', 'snippet'],
                   },
-                },
-                activeQuestionIndex: { type: Type.INTEGER },
-                questionText: { type: Type.STRING },
-                detectedSubject: { type: Type.STRING },
-                detectedLanguage: { type: Type.STRING },
-                isMultipleChoice: { type: Type.BOOLEAN },
-                options: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      label: { type: Type.STRING },
-                      text: { type: Type.STRING },
-                      isCorrect: { type: Type.BOOLEAN },
-                      box2d: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+                  activeQuestionIndex: { type: Type.INTEGER },
+                  questionText: { type: Type.STRING },
+                  detectedSubject: { type: Type.STRING },
+                  detectedLanguage: { type: Type.STRING },
+                  isMultipleChoice: { type: Type.BOOLEAN },
+                  options: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        label: { type: Type.STRING },
+                        text: { type: Type.STRING },
+                        isCorrect: { type: Type.BOOLEAN },
+                        box2d: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+                      },
+                      required: ['label', 'text', 'isCorrect'],
                     },
-                    required: ['label', 'text', 'isCorrect'],
                   },
+                  correctAnswerLabel: { type: Type.STRING },
+                  correctAnswerText: { type: Type.STRING },
+                  confidence: { type: Type.STRING },
+                  confidenceScore: { type: Type.INTEGER },
+                  isUnclear: { type: Type.BOOLEAN },
+                  unclearReason: { type: Type.STRING },
+                  warningNotice: { type: Type.STRING },
+                  stepByStepExplanation: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  summaryExplanation: { type: Type.STRING },
+                  keyConcepts: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  diagramDescription: { type: Type.STRING },
                 },
-                correctAnswerLabel: { type: Type.STRING },
-                correctAnswerText: { type: Type.STRING },
-                confidence: { type: Type.STRING },
-                confidenceScore: { type: Type.INTEGER },
-                isUnclear: { type: Type.BOOLEAN },
-                unclearReason: { type: Type.STRING },
-                warningNotice: { type: Type.STRING },
-                stepByStepExplanation: { type: Type.ARRAY, items: { type: Type.STRING } },
-                summaryExplanation: { type: Type.STRING },
-                keyConcepts: { type: Type.ARRAY, items: { type: Type.STRING } },
-                diagramDescription: { type: Type.STRING },
+                required: ['questionText', 'correctAnswerText', 'summaryExplanation'],
               },
-              required: [
-                'questionText',
-                'correctAnswerText',
-                'summaryExplanation',
-              ],
             },
-          },
-        });
+          });
 
-        if (response.text) {
+          if (!response.text) throw new Error('Gemini ' + modelName + ' returned an empty response.');
           responseText = response.text;
-          console.log(`[AI Solver] Gemini ${modelName} responded in ${((Date.now() - geminiStartedAt) / 1000).toFixed(2)}s`);
+          console.log('[AI Solver] Gemini ' + modelName + ' responded in ' + ((Date.now() - geminiStartedAt) / 1000).toFixed(2) + 's');
+          break;
+        } catch (err: any) {
+          lastError = err;
+          const errMsg = err?.message || String(err);
+          const statusCode = getStatusCode(err);
+          const isRateLimit = statusCode === 429 || /RESOURCE_EXHAUSTED|rate.?limit|quota/i.test(errMsg);
+          const isUnavailable = statusCode === 503 || statusCode === 502 || statusCode === 504 ||
+            /UNAVAILABLE|SERVICE_UNAVAILABLE|high demand|overloaded|timed? ?out|deadline exceeded/i.test(errMsg);
+
+          console.warn('[AI Solver] Model ' + modelName + ' attempt ' + attempt + ' failed:', errMsg);
+
+          if (isRateLimit) {
+            sawRateLimit = true;
+            const retryMatch = errMsg.match(/retry in ([0-9.]+)s/i);
+            if (retryMatch?.[1]) detectedRetrySeconds = Math.max(1, Math.ceil(parseFloat(retryMatch[1])));
+          }
+          if (isUnavailable) sawUnavailable = true;
+
+          if ((isRateLimit || isUnavailable) && attempt === 1) {
+            const backoffMs = 500 + Math.floor(Math.random() * 350);
+            await sleep(backoffMs);
+            continue;
+          }
           break;
         }
-      } catch (err: any) {
-        lastError = err;
-        const errMsg = err?.message || String(err);
-        console.warn(`[AI Solver] Model ${modelName} failed:`, errMsg);
-
-        // Check if retry delay can be parsed
-        const retryMatch = errMsg.match(/retry in ([0-9.]+)s/i);
-        if (retryMatch && retryMatch[1]) {
-          detectedRetrySeconds = Math.ceil(parseFloat(retryMatch[1]));
-        }
-
-        // Don't retry automatically: return transient errors quickly instead of delaying the answer.
-        break;
       }
     }
-
-    if (responseText) {
-      break;
-    }
-  }
 
     if (!responseText) {
-      const rawMsg = lastError?.message || '';
-      const is429 =
-        rawMsg.includes('429') ||
-        rawMsg.includes('RESOURCE_EXHAUSTED') ||
-        rawMsg.includes('quota') ||
-        lastError?.status === 429;
+      const status = sawRateLimit ? 429 : sawUnavailable ? 503 : 502;
+      const errorMessage = sawRateLimit
+        ? 'Gemini is rate-limiting requests right now. Please wait about ' + detectedRetrySeconds + ' seconds, then retry.'
+        : sawUnavailable
+          ? 'Gemini is temporarily busy. All available Flash models were tried; please retry in a few seconds.'
+          : 'Gemini could not complete this request. ' + (lastError?.message || 'Please retry.');
 
-      if (is429) {
-        return res.status(429).json({
-          success: false,
-          isRateLimit: true,
-          retryAfter: detectedRetrySeconds || 30,
-          error: `Free tier rate limit reached (5 requests/minute). Please wait ${detectedRetrySeconds || 30} seconds and try again.`,
-        });
-      }
-
-      throw lastError || new Error('No response received from the Gemini vision service.');
+      console.error('[AI Solver] All configured Gemini models failed.', {
+        status,
+        lastError: lastError?.message || String(lastError || 'unknown error'),
+      });
+      return res.status(status).json({
+        success: false,
+        isRateLimit: sawRateLimit,
+        isTemporary: sawUnavailable,
+        retryAfter: detectedRetrySeconds,
+        error: errorMessage,
+      });
     }
 
     function extractJson(raw: string): any {
