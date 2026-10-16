@@ -165,9 +165,9 @@ OUTPUT INSTRUCTIONS:
 
     // Use the latest stable Flash model first, then fall back if it is overloaded.
     const candidateModels = [
-      'gemini-3.8-flash',
-      'gemini-3.6-flash',
       'gemini-3.5-flash-lite',
+      'gemini-3.6-flash',
+      'gemini-3.8-flash',
     ];
     let lastError: any = null;
     let responseText: string | null = null;
@@ -196,7 +196,7 @@ OUTPUT INSTRUCTIONS:
             config: {
               systemInstruction,
               thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-              maxOutputTokens: 384,
+              maxOutputTokens: 1024,
               responseMimeType: 'application/json',
               responseSchema: {
                 type: Type.OBJECT,
