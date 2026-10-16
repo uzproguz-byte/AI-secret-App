@@ -166,7 +166,7 @@ OUTPUT INSTRUCTIONS:
     // Use the latest stable Flash model first, then fall back if it is overloaded.
     const candidateModels = [
       'gemini-3.8-flash',
-      'gemini-3.7-flash',
+      'gemini-3.6-flash',
       'gemini-3.5-flash-lite',
     ];
     let lastError: any = null;
