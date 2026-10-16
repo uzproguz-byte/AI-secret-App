@@ -377,11 +377,17 @@ export const ScreenSharePanel: React.FC<Props> = ({
             <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950/92 backdrop-blur-xl border border-emerald-500/50 shadow-2xl text-left animate-in fade-in slide-in-from-bottom-2">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-lg font-black text-xs bg-emerald-500 text-slate-950 shadow">
-                    CHOICE {currentResult.correctAnswerLabel}
-                  </span>
-                  <span className="text-xs font-bold text-emerald-300">
-                    {t.correctAnswer}
+                  {currentResult.isUnclear ? (
+                    <span className="px-2.5 py-0.5 rounded-lg font-black text-xs bg-amber-400 text-slate-950 shadow">
+                      CHECK QUESTION BOUNDARY
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-lg font-black text-xs bg-emerald-500 text-slate-950 shadow">
+                      CHOICE {currentResult.correctAnswerLabel}
+                    </span>
+                  )}
+                  <span className={`text-xs font-bold ${currentResult.isUnclear ? 'text-amber-300' : 'text-emerald-300'}`}>
+                    {currentResult.isUnclear ? 'Need a clearer question view' : t.correctAnswer}
                   </span>
                 </div>
                 {currentResult.durationMs && (
@@ -418,7 +424,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
                 {t.startScreenShare}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Ekranni ulashing, savolni oching va pastdagi <strong className="text-slate-200">Tahlil qilish</strong> tugmasini bosing. Javob shu yerda ko‘rinadi.
+                Avval testni alohida Chrome tabida oching. Share oynasida aynan test tabini tanlang — shunda bu yerga qaytsangiz ham test tasviri kuzatishda qoladi. Keyin <strong className="text-slate-200">Solve Page</strong> tugmasini bosing.
               </p>
             </div>
 
@@ -453,7 +459,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="text-left">
               <p className="text-sm font-bold text-white">Ekran tayyor</p>
-              <p className="text-xs text-slate-400">Savol ekranda ko‘rinib turganini tekshiring.</p>
+              <p className="text-xs text-slate-400">Eng yaxshisi: faqat test Chrome tabini ulashing, butun monitorni emas.</p>
             </div>
             {/* Solve Page: scan the current visible question, then detect changed questions. */}
           <button
