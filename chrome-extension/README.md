@@ -1,27 +1,19 @@
-# AI Study Assistant Chrome Extension
+# AI Answer Chrome Extension
 
-A small Chrome extension that opens a dedicated compact window, requests screen-sharing permission, and sends a still frame to the existing Railway AI backend when you click **Analyze screen**.
+A compact Chrome extension with one main button: **Share screen**, then **Analyze screen**. The answer appears underneath. Multiple-choice answers include the option letter and text (for example, `B) Paris`).
 
-## Install locally
+## Install
 
-1. Download or clone this repository.
-2. Open `chrome://extensions` in Google Chrome.
+1. Download the extension ZIP and extract it.
+2. Open `chrome://extensions` in Chrome.
 3. Turn on **Developer mode**.
 4. Click **Load unpacked**.
-5. Select the `chrome-extension` folder from this repository.
-6. Click the AI Study Assistant extension icon and choose **Open screen assistant**.
-7. Click **Share screen**, select a tab/window/screen in Chrome's permission dialog, then click **Analyze screen**.
+5. Select the extracted `chrome-extension` folder.
 
-## Privacy behavior
+Click the extension icon to open the small assistant window. Click **Share screen**, choose a tab/window/screen in Chrome's picker, then click **Analyze screen**.
 
-- Chrome asks you to select what to share.
-- The live video preview stays in the extension window.
-- A JPEG still frame is sent to `https://ai-secret-app-production.up.railway.app/api/analyze` only when you click Analyze screen, or when you explicitly enable auto-analysis.
-- Click **Stop sharing** or close the assistant window to stop capture.
-- Do not share private information unless you intend to send it for analysis.
+## Privacy
 
-## Notes
+Chrome asks you to choose what to share. A still screenshot is sent to `https://ai-secret-app-production.up.railway.app/api/analyze` only when you click **Analyze screen**. The extension does not continuously upload video. Close the assistant window or stop sharing through Chrome to end capture.
 
-- This is a local unpacked extension, not yet published on the Chrome Web Store.
-- The backend API must be online and configured with its server-side Gemini key.
-- Auto-analysis checks every 15 seconds; leave it off if you want to control every request or avoid API quota limits.
+The backend must be online for answers to work. This is a local unpacked extension, not a Chrome Web Store publication.
