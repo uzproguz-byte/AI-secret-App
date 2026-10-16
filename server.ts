@@ -77,7 +77,7 @@ app.post('/api/analyze', async (req, res) => {
       .update(image ? `image:${image}` : `text:${(text || '').trim()}`)
       .digest('hex')
       .slice(0, 32);
-    const cacheKey = `${language}_${subject}_${selectedQuestionIndex}_${inputFingerprint}`;
+    const cacheKey = `${language}_${subject}_${selectedQuestionIndex}_${fastMode ? 'fast' : 'detail'}_${inputFingerprint}`;
 
     const cachedEntry = fastCache.get(cacheKey);
     if (cachedEntry && Date.now() - cachedEntry.timestamp < 3600000) {
@@ -148,21 +148,24 @@ SPEED & ACCURACY RULE:
 - Focus Question Index: ${selectedQuestionIndex}
 ${text ? `QUESTION CONTENT:\n${text}` : ''}
 
-OUTPUT INSTRUCTIONS:
-1. Read only the question and choices actually visible in the supplied image/text. Never invent other questions or choices.
-2. For a multiple-choice question, choose the best answer and set correctAnswerLabel to the exact choice label only (for example, "A" or "C"), not "Direct Answer".
-3. For a multiple-choice question, correctAnswerText MUST start with that exact label and include the selected option text, such as "C) Photosynthesis". Never return only an explanation without the option letter.
-4. Include the visible options in options and set isCorrect=true for exactly one option when the correct choice is clear; set isCorrect=false for the others.
-5. For a direct-answer question with no choices, put the concise answer in correctAnswerText and use "Direct Answer" as correctAnswerLabel.
-6. Keep the response compact. Keep stepByStepExplanation to 1-2 short steps and summaryExplanation to one short sentence.
-7. Never put JSON or field names inside correctAnswerText or summaryExplanation.
-8. If the question or choices are unreadable, clearly say so instead of guessing a choice letter.
-9. If multiple questions are clearly visible, set multipleQuestionsFound to true and include a short allQuestionsSummary; otherwise set it to false.
+OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
+1. Answer exactly ONE target question per image. Identify question headings first, then group the text and options that appear AFTER that question heading and BEFORE the next question heading.
+2. Ignore any orphan answer choice at the top of the screenshot if it appears BEFORE the current question heading. It may be the last option from the previous question. Never attach that choice to the next question just because it is nearby.
+3. Never use options that appear after the next question heading to answer the current question. Do not mix choices between question blocks.
+4. Prefer the first fully readable question block in the shared view whose question heading and choices are visible. Ignore fragments of earlier/later questions.
+5. Do not identify an option based on its letter alone. Read its actual text and verify that it belongs to the chosen question block.
+6. For multiple-choice questions, set correctAnswerLabel to the exact visible option label only (for example, "A" or "C"). Set correctAnswerText to the label plus the exact selected choice text, for example "C) Photosynthesis".
+7. Include only choices belonging to that same question block in options. Mark isCorrect=true for exactly one option only when the answer and boundaries are clear; mark the others false.
+8. If a question heading is missing, the choices overlap question boundaries, or any choice could belong to the previous/next question, do NOT guess. Set isUnclear=true, confidence="LOW", confidenceScore at most 20, correctAnswerLabel="Unclear", options=[], and correctAnswerText="Question boundary or choices are unclear. Show one complete question and analyze again."
+9. For a direct-answer question with no choices, put the concise answer in correctAnswerText and use "Direct Answer" as correctAnswerLabel.
+10. Keep the response compact. Keep stepByStepExplanation to 1-2 short steps and summaryExplanation to one short sentence.
+11. Never put JSON or field names inside correctAnswerText or summaryExplanation.
+12. Do not answer additional visible questions. Use multipleQuestionsFound=false for this single-question workflow.
 `;
 
     parts.push({ text: promptText });
 
-    const systemInstruction = `You are a rapid-response educational AI tutor. Read the supplied image or text carefully and return concise, accurate structured JSON as quickly as possible. For every clear multiple-choice question, identify the exact correct option label and put it at the beginning of correctAnswerText (for example, "B) Option text"). Set correctAnswerLabel to just that label and mark exactly that option isCorrect=true. Do not omit A/B/C/D. State uncertainty rather than guessing when key details are unreadable.`;
+    const systemInstruction = `You are a careful single-question visual solver. Return concise, accurate structured JSON. Separate question blocks using the visible question heading: options above a heading may belong to the previous question, and options below the next heading belong to that next question. Never mix them. For a clear multiple-choice answer, provide the exact option label and text, and mark exactly that option isCorrect=true. If question boundaries or any needed choices are ambiguous, set isUnclear=true, confidence="LOW", confidenceScore at most 20, correctAnswerLabel="Unclear", options=[], and explain that the screenshot must show one complete question. Accuracy is more important than guessing.`;
 
     // Use the latest stable Flash model first, then fall back if it is overloaded.
     const candidateModels = [
@@ -369,8 +372,15 @@ OUTPUT INSTRUCTIONS:
       }
       if (typeof parsedData.isUnclear !== 'boolean') parsedData.isUnclear = false;
 
-      // Ensure a clear multiple-choice answer includes the selected option label and text.
-      if (parsedData.options.length > 0) {
+      // Never present a guessed option when the model flags an unclear question boundary.
+      if (parsedData.isUnclear) {
+        parsedData.correctAnswerLabel = 'Unclear';
+        parsedData.correctAnswerText = 'Question boundary or choices are unclear. Show one complete question and analyze again.';
+        parsedData.options = [];
+        parsedData.isMultipleChoice = false;
+        parsedData.confidence = 'LOW';
+        parsedData.confidenceScore = Math.min(Number(parsedData.confidenceScore) || 20, 20);
+      } else if (parsedData.options.length > 0) {
         const normalizeOptionLabel = (value: any): string => {
           const match = String(value || '').trim().match(/^(?:option\s*)?([A-Z0-9])(?:[\s).:,\-]|$)/i);
           return match ? match[1].toUpperCase() : '';
