@@ -124,6 +124,7 @@ export default function App() {
     image?: string | null;
     text?: string | null;
     selectedQuestionIndex?: number;
+    fastMode?: boolean;
   }) => {
     setIsLoading(true);
     setErrorMessage(null);
@@ -134,6 +135,7 @@ export default function App() {
         language: targetLang,
         subject: targetSubject,
         selectedQuestionIndex: params.selectedQuestionIndex ?? 0,
+        fastMode: params.fastMode ?? true,
       };
 
       if (params.image) {
@@ -372,8 +374,8 @@ export default function App() {
               {inputMode === 'screen' && (
                 <ScreenSharePanel
                   t={t}
-                  onAnalyzeFrame={(imageDataUrl) =>
-                    executeAnalysis({ image: imageDataUrl })
+                  onAnalyzeFrame={(imageDataUrl, fastMode) =>
+                    executeAnalysis({ image: imageDataUrl, fastMode })
                   }
                   isLoading={isLoading}
                   currentResult={currentResult}
