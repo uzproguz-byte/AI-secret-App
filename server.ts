@@ -372,7 +372,7 @@ OUTPUT INSTRUCTIONS:
       // Ensure a clear multiple-choice answer includes the selected option label and text.
       if (parsedData.options.length > 0) {
         const normalizeOptionLabel = (value: any): string => {
-          const match = String(value || '').trim().match(/^(?:option\\s*)?([A-Z0-9])(?:[\\s).:,\\-]|$)/i);
+          const match = String(value || '').trim().match(/^(?:option\s*)?([A-Z0-9])(?:[\s).:,\-]|$)/i);
           return match ? match[1].toUpperCase() : '';
         };
         const markedCorrect = parsedData.options.filter((option: any) => option && option.isCorrect === true);
