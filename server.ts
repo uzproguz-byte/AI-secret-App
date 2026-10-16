@@ -76,7 +76,7 @@ app.post('/api/analyze', async (req, res) => {
 
     // Check fast cache first
     const inputFingerprint = createHash('sha256')
-      .update(image ? `image:${image}` : `text:${(text || '').trim()}`)
+      .update(image ? `image:${image}\ntext:${(text || '').trim()}` : `text:${(text || '').trim()}`)
       .digest('hex')
       .slice(0, 32);
     const cacheKey = `${language}_${subject}_${selectedQuestionIndex}_${fastMode ? 'fast' : 'detail'}_${inputFingerprint}`;
