@@ -9,19 +9,58 @@
 <body>
   <main class="app">
     <header class="header">
-      <strong>AI Answer</strong>
-      <span id="liveBadge" class="badge">Not sharing</span>
+      <div class="brand-mark" aria-hidden="true">✦</div>
+      <div class="brand-copy">
+        <div class="eyebrow">AI STUDY ASSISTANT</div>
+        <h1>Screen Solver</h1>
+        <p>Share a question. Get the answer.</p>
+      </div>
+      <span id="liveBadge" class="badge"><span class="badge-dot"></span> Not sharing</span>
     </header>
 
-    <video id="preview" class="capture-video" autoplay muted playsinline></video>
-
-    <button id="mainAction" class="primary">Share screen</button>
-    <p id="status" class="status" role="status">Share your screen to get started.</p>
-
-    <section class="answer-card">
-      <h2>Answer</h2>
-      <div id="answer" class="answer empty">Your answer will appear here.</div>
+    <section class="screen-card" aria-label="Screen preview">
+      <div class="screen-card-heading">
+        <span class="section-label">SCREEN PREVIEW</span>
+        <span id="previewHint" class="preview-hint">Waiting for screen</span>
+      </div>
+      <div class="preview-wrap">
+        <video id="preview" autoplay muted playsinline></video>
+        <div id="placeholder" class="placeholder">
+          <div class="screen-icon" aria-hidden="true">▣</div>
+          <strong>Your screen will appear here</strong>
+          <span>Click Share Screen and choose a tab, window, or monitor.</span>
+        </div>
+      </div>
     </section>
+
+    <section class="actions" aria-label="Screen controls">
+      <button id="share" class="share-button" type="button">
+        <span class="button-icon" aria-hidden="true">▣</span>
+        <span id="shareLabel">Share Screen</span>
+      </button>
+      <button id="analyze" class="analyze-button" type="button" disabled>
+        <span class="button-icon" aria-hidden="true">✦</span>
+        <span id="analyzeLabel">Analyze Screen</span>
+      </button>
+    </section>
+    <p id="status" class="status" role="status">First share your screen, then press Analyze Screen.</p>
+
+    <section class="answer-card" aria-live="polite">
+      <div class="answer-topline">
+        <div>
+          <div class="section-label">YOUR RESULT</div>
+          <h2>Answer</h2>
+        </div>
+        <span id="answerTag" class="answer-tag">READY WHEN YOU ARE</span>
+      </div>
+      <div class="answer-content">
+        <div id="answerLetter" class="answer-letter" hidden></div>
+        <div id="answer" class="answer empty">Your answer will show up here, clearly and in big text.</div>
+      </div>
+      <p id="explanation" class="explanation" hidden></p>
+    </section>
+
+    <footer class="privacy"><span aria-hidden="true">🔒</span> A screenshot is sent only when you press Analyze Screen. Your screen is not continuously uploaded.</footer>
   </main>
   <script src="share.js"></script>
 </body>
