@@ -6,9 +6,9 @@ openButton.addEventListener('click', () => {
   status.textContent = 'Opening assistant…';
   chrome.windows.create({
     url: chrome.runtime.getURL('share.html'),
-    type: 'popup',
-    width: 390,
-    height: 640,
+    type: 'normal',
+    width: 420,
+    height: 700,
     focused: true
   }, (win) => {
     if (chrome.runtime.lastError) {
