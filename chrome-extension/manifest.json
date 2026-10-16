@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "AI Study Assistant — Screen Analyzer",
+  "version": "1.0.0",
+  "description": "Share your screen with permission and get a quick AI answer.",
+  "permissions": [
+    "windows"
+  ],
+  "host_permissions": [
+    "https://ai-secret-app-production.up.railway.app/*"
+  ],
+  "action": {
+    "default_title": "AI Study Assistant",
+    "default_popup": "popup.html"
+  }
+}
