@@ -149,19 +149,20 @@ SPEED & ACCURACY RULE:
 ${text ? `QUESTION CONTENT:\n${text}` : ''}
 
 OUTPUT INSTRUCTIONS:
-1. Read only the question or questions actually visible in the supplied image/text. Never invent other questions.
-2. Identify the correct answer and explain it briefly in the requested language.
-3. Keep the output compact: at most 3 short explanation steps and one short summary sentence.
-4. If multiple questions are clearly visible, set multipleQuestionsFound to true and include a short allQuestionsSummary; otherwise omit it and use false.
-5. Return only fields needed for a concise answer. Do not emit empty optional fields or verbose metadata.
-6. Keep stepByStepExplanation to 1-2 short steps and summaryExplanation to one sentence.
+1. Read only the question and choices actually visible in the supplied image/text. Never invent other questions or choices.
+2. For a multiple-choice question, choose the best answer and set correctAnswerLabel to the exact choice label only (for example, "A" or "C"), not "Direct Answer".
+3. For a multiple-choice question, correctAnswerText MUST start with that exact label and include the selected option text, such as "C) Photosynthesis". Never return only an explanation without the option letter.
+4. Include the visible options in options and set isCorrect=true for exactly one option when the correct choice is clear; set isCorrect=false for the others.
+5. For a direct-answer question with no choices, put the concise answer in correctAnswerText and use "Direct Answer" as correctAnswerLabel.
+6. Keep the response compact. Keep stepByStepExplanation to 1-2 short steps and summaryExplanation to one short sentence.
 7. Never put JSON or field names inside correctAnswerText or summaryExplanation.
-8. For a direct-answer question, put only the answer in correctAnswerText and use "Direct Answer" as correctAnswerLabel.
+8. If the question or choices are unreadable, clearly say so instead of guessing a choice letter.
+9. If multiple questions are clearly visible, set multipleQuestionsFound to true and include a short allQuestionsSummary; otherwise set it to false.
 `;
 
     parts.push({ text: promptText });
 
-    const systemInstruction = `You are a rapid-response educational AI tutor. Read the supplied image or text carefully and return concise, accurate structured JSON as quickly as possible. State uncertainty rather than guessing when key details are unreadable.`;
+    const systemInstruction = `You are a rapid-response educational AI tutor. Read the supplied image or text carefully and return concise, accurate structured JSON as quickly as possible. For every clear multiple-choice question, identify the exact correct option label and put it at the beginning of correctAnswerText (for example, "B) Option text"). Set correctAnswerLabel to just that label and mark exactly that option isCorrect=true. Do not omit A/B/C/D. State uncertainty rather than guessing when key details are unreadable.`;
 
     // Use the latest stable Flash model first, then fall back if it is overloaded.
     const candidateModels = [
@@ -367,6 +368,37 @@ OUTPUT INSTRUCTIONS:
         parsedData.correctAnswerLabel = 'Direct Answer';
       }
       if (typeof parsedData.isUnclear !== 'boolean') parsedData.isUnclear = false;
+
+      // Ensure a clear multiple-choice answer includes the selected option label and text.
+      if (parsedData.options.length > 0) {
+        const normalizeOptionLabel = (value: any): string => {
+          const match = String(value || '').trim().match(/^(?:option\\s*)?([A-Z0-9])(?:[\\s).:,\\-]|$)/i);
+          return match ? match[1].toUpperCase() : '';
+        };
+        const markedCorrect = parsedData.options.filter((option: any) => option && option.isCorrect === true);
+        let selectedOption: any = markedCorrect.length === 1 ? markedCorrect[0] : null;
+
+        if (!selectedOption) {
+          const answerLabel = normalizeOptionLabel(parsedData.correctAnswerLabel) ||
+            normalizeOptionLabel(parsedData.correctAnswerText);
+          if (answerLabel) {
+            selectedOption = parsedData.options.find((option: any) =>
+              normalizeOptionLabel(option?.label) === answerLabel
+            ) || null;
+          }
+        }
+
+        if (selectedOption) {
+          const label = normalizeOptionLabel(selectedOption.label) ||
+            normalizeOptionLabel(parsedData.correctAnswerLabel);
+          const optionText = typeof selectedOption.text === 'string' ? selectedOption.text.trim() : '';
+          if (label && optionText) {
+            parsedData.correctAnswerLabel = label;
+            parsedData.correctAnswerText = label + ') ' + optionText;
+            parsedData.isMultipleChoice = true;
+          }
+        }
+      }
     } catch (parseErr) {
       console.warn('[AI Solver] Failed to parse a complete answer JSON:', parseErr);
       return res.status(502).json({
