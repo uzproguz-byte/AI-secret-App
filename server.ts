@@ -172,11 +172,15 @@ OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
     const systemInstruction = `You are a careful single-question visual solver. Return concise, accurate structured JSON. Separate question blocks using the visible question heading: options above a heading may belong to the previous question, and options below the next heading belong to that next question. Never mix them. For a clear multiple-choice answer, provide the exact option label and text, and mark exactly that option isCorrect=true. If question boundaries or any needed choices are ambiguous, set isUnclear=true, confidence="LOW", confidenceScore at most 20, correctAnswerLabel="Unclear", options=[], and explain that the screenshot must show one complete question. Accuracy is more important than guessing.`;
 
     // Use the latest stable Flash model first, then fall back if it is overloaded.
-    const candidateModels = [
-      'gemini-3.5-flash-lite',
-      'gemini-3.6-flash',
-      'gemini-3.8-flash',
-    ];
+    // The extension's screenshot loop must be quick and predictable. Use one low-latency
+    // model for coordinate-rich visual scans; retain fallback models for normal website requests.
+    const candidateModels = requiresScreenshotBoxes
+      ? ['gemini-3.5-flash-lite']
+      : [
+          'gemini-3.5-flash-lite',
+          'gemini-3.6-flash',
+          'gemini-3.8-flash',
+        ];
     let lastError: any = null;
     let responseText: string | null = null;
     let detectedRetrySeconds = 3;
@@ -194,7 +198,7 @@ OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
       if (responseText) break;
 
       // Retry a transient failure once with short backoff, then try the next model.
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      for (let attempt = 1; attempt <= (requiresScreenshotBoxes ? 1 : 2); attempt++) {
         try {
           console.log('[AI Solver] Calling ' + modelName + ' (attempt ' + attempt + ')...');
           const geminiStartedAt = Date.now();
@@ -204,7 +208,7 @@ OUTPUT INSTRUCTIONS — QUESTION BOUNDARIES ARE CRITICAL:
             config: {
               systemInstruction,
               thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-              maxOutputTokens: 1024,
+              maxOutputTokens: requiresScreenshotBoxes ? 420 : 1024,
               responseMimeType: 'application/json',
               responseSchema: {
                 type: Type.OBJECT,
