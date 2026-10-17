@@ -5,6 +5,7 @@ import {
   AlertCircle,
   RefreshCw,
   Video,
+  Image as ImageIcon,
   Eye,
   Sparkles,
   Zap,
@@ -76,6 +77,8 @@ export const ScreenSharePanel: React.FC<Props> = ({
   isRtl,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const screenshotInputRef = useRef<HTMLInputElement | null>(null);
+  const isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   const streamRef = useRef<MediaStream | null>(null);
   const baselineSignatureRef = useRef<number[] | null>(null);
   const autoAnalysisInFlightRef = useRef(false);
@@ -87,6 +90,7 @@ export const ScreenSharePanel: React.FC<Props> = ({
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
   const [autoSolveActive, setAutoSolveActive] = useState<boolean>(false);
   const [autoQuestionCount, setAutoQuestionCount] = useState<number>(0);
+  const [isPreparingScreenshot, setIsPreparingScreenshot] = useState<boolean>(false);
 
   // Stop sharing cleanup
   const stopScreenShare = useCallback(() => {
@@ -240,7 +244,8 @@ export const ScreenSharePanel: React.FC<Props> = ({
       if (autoTriggered) setAutoQuestionCount((count) => count + 1);
       // Higher vision resolution is intentional: it helps separate adjacent questions
       // and read small option labels. The server still returns quickly where possible.
-      onAnalyzeFrame(dataUrl, false);
+      // Fast mode reduces vision latency; the model is instructed to say when unsure rather than guess.
+      onAnalyzeFrame(dataUrl, true);
     } catch (err: any) {
       console.error('Frame capture error:', err);
       setErrorMessage('Could not capture the shared screen. Please try again.');
@@ -248,6 +253,43 @@ export const ScreenSharePanel: React.FC<Props> = ({
     }
   }, [isLoading, onAnalyzeFrame, autoSolveActive]);
 
+  // Android Chrome usually cannot provide a webpage with a live device-screen stream.
+  // Offer a file picker in the main Screen Share panel as a reliable mobile fallback.
+  const handleMobileScreenshot = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setErrorMessage('Choose a screenshot image (PNG, JPG, or WEBP).'); return; }
+    if (file.size > 20 * 1024 * 1024) { setErrorMessage('That image is over 20 MB. Choose a smaller screenshot.'); return; }
+    setIsPreparingScreenshot(true);
+    setErrorMessage(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Could not read that image. Please choose it again.'));
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.readAsDataURL(file);
+      });
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('That image could not be opened. Try another screenshot.'));
+        img.src = dataUrl;
+      });
+      const scale = Math.min(1, 1440 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Image processing is unavailable in this browser.');
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const optimizedImage = canvas.toDataURL('image/jpeg', 0.86);
+      setCapturedPreview(optimizedImage);
+      onAnalyzeFrame(optimizedImage, true);
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Could not prepare that screenshot. Please try again.');
+    } finally { setIsPreparingScreenshot(false); }
+  };
   // Release the auto-solve lock only after the current AI request has finished.
   // Keep the old baseline so a question change that happens during analysis is not missed.
   useEffect(() => {
@@ -448,7 +490,9 @@ export const ScreenSharePanel: React.FC<Props> = ({
                 {t.startScreenShare}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Avval testni alohida Chrome tabida oching. Share oynasida aynan test tabini tanlang — shunda bu yerga qaytsangiz ham test tasviri kuzatishda qoladi. Keyin <strong className="text-slate-200">Solve Page</strong> tugmasini bosing.
+                {isMobileBrowser
+                  ? 'Android Chrome usually cannot stream your entire phone screen to a normal webpage. Take a phone screenshot, then choose it below to analyze it here. Live screen sharing remains available on supported desktop browsers.'
+                  : 'Open the test in a separate browser tab, share that tab, then press Solve Page to analyze the current question.'}
               </p>
             </div>
 
@@ -464,6 +508,24 @@ export const ScreenSharePanel: React.FC<Props> = ({
               </span>
             </button>
 
+            <input
+              ref={screenshotInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleMobileScreenshot}
+              className="hidden"
+              aria-label="Choose a phone screenshot"
+            />
+            <button
+              type="button"
+              onClick={() => screenshotInputRef.current?.click()}
+              disabled={isLoading || isPreparingScreenshot}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 font-bold text-sm disabled:opacity-60"
+            >
+              {isPreparingScreenshot ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+              <span>{isPreparingScreenshot ? "Preparing screenshot…" : "Choose screenshot from phone"}</span>
+            </button>
+            <p className="text-[11px] text-slate-500 leading-relaxed">The image is resized before upload. The AI aims to answer quickly, but network and Gemini response times vary, and answers can still be wrong.</p>
             <div className="pt-2 flex items-center justify-center gap-3 text-[11px] text-slate-400">
               <span className="flex items-center gap-1">
                 <Monitor className="w-3.5 h-3.5 text-indigo-400" /> Desktop
