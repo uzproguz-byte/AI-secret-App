@@ -105,64 +105,80 @@ export const ScreenSharePanel: React.FC<Props> = ({
     setStreamResolution(null);
   }, []);
 
-  // Start Screen Sharing (Universal mobile & desktop compatible)
+  // Start screen sharing directly from this button tap.
+  // Some legacy browsers expose the API on navigator; standard browsers expose it on mediaDevices.
   const startScreenShare = async () => {
     setErrorMessage(null);
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    const nav = navigator as Navigator & {
+      getDisplayMedia?: (options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
+    };
+    const devices = navigator.mediaDevices as (MediaDevices & {
+      getDisplayMedia?: (options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
+    }) | undefined;
+
+    const getDisplayMedia =
+      (devices?.getDisplayMedia && devices.getDisplayMedia.bind(devices)) ||
+      (nav.getDisplayMedia && nav.getDisplayMedia.bind(nav));
+
+    if (!getDisplayMedia) {
+      const mobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
       setErrorMessage(
-        t.screenShareNotSupported ||
-          'This browser cannot share its screen. On phones, use the Upload tab with a screenshot or the Camera tab to photograph a worksheet. Screen-sharing support varies by mobile browser.'
+        mobileDevice
+          ? 'This phone browser does not expose screen sharing to websites. The phone can share its screen in some apps, but this browser must provide getDisplayMedia for this website to receive the screen. Try opening this page in a browser that supports website screen capture.'
+          : 'This browser does not expose the screen-capture API. Open this site in a current browser over HTTPS and try again.'
       );
       return;
     }
 
     try {
-      // Mobile-safe displayMedia constraints
-      // Note: Do NOT specify displaySurface: "monitor" because mobile devices reject monitor surfaces
-      const constraints: any = {
-        video: {
-          frameRate: { ideal: 30, max: 60 },
-        },
-        audio: false,
-      };
+      // Use the least restrictive constraints. Some mobile pickers reject frame-rate preferences.
+      const stream = await getDisplayMedia({ video: true, audio: false });
+      const track = stream.getVideoTracks()[0];
+      if (!track) {
+        stream.getTracks().forEach((item) => item.stop());
+        throw new Error('The browser did not return a screen-share video track.');
+      }
 
-      const stream = await navigator.mediaDevices.getDisplayMedia(constraints);
       streamRef.current = stream;
+      track.onended = () => stopScreenShare();
 
-      // Handle user stopping share through browser banner
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.onended = () => {
-          stopScreenShare();
-        };
-
-        const settings = videoTrack.getSettings();
-        if (settings.width && settings.height) {
-          setStreamResolution({ width: settings.width, height: settings.height });
-        }
+      const settings = track.getSettings();
+      if (settings.width && settings.height) {
+        setStreamResolution({ width: settings.width, height: settings.height });
       }
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(console.error);
-          if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) {
-            setStreamResolution({
-              width: videoRef.current.videoWidth,
-              height: videoRef.current.videoHeight,
-            });
-          }
-        };
+      const video = videoRef.current;
+      if (!video) {
+        stream.getTracks().forEach((item) => item.stop());
+        streamRef.current = null;
+        throw new Error('The screen-share preview is not ready. Tap Share Screen again.');
       }
 
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+      try {
+        await video.play();
+      } catch (playError) {
+        // Keep the sharing state so the user can retry preview playback with a tap.
+        console.warn('Screen-share preview autoplay was blocked:', playError);
+      }
+      if (video.videoWidth && video.videoHeight) {
+        setStreamResolution({ width: video.videoWidth, height: video.videoHeight });
+      }
       setIsSharing(true);
     } catch (err: any) {
       console.warn('Screen share cancelled or failed:', err);
-      if (err.name === 'NotAllowedError') {
-        setErrorMessage(t.screenSharePermissionDenied);
+      const mobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      if (err?.name === 'NotAllowedError') {
+        setErrorMessage('Screen sharing was cancelled or blocked. Tap Start Screen Sharing again and approve the browser/system screen-share prompt.');
+      } else if (err?.name === 'NotSupportedError' || err?.name === 'TypeError') {
+        setErrorMessage(mobileDevice
+          ? 'This mobile browser rejected website screen sharing. Screen sharing in the phone OS is not automatically available to webpages; the browser must support getDisplayMedia.'
+          : 'This browser rejected the screen-capture request. Try an updated browser over HTTPS.');
       } else {
-        setErrorMessage(err.message || 'Unable to start screen capture');
+        setErrorMessage(err?.message || 'Unable to start screen capture.');
       }
       setIsSharing(false);
     }
