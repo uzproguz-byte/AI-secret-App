@@ -59,10 +59,9 @@ export default function App() {
   const [targetSubject, setTargetSubject] = useState<SupportedSubject>('auto');
   const [showStudySettings, setShowStudySettings] = useState<boolean>(false);
 
-  // Use screen share only where the browser supports it. Phones start with Upload.
-  const [inputMode, setInputMode] = useState<InputMode>(() =>
-    screenCaptureSupported ? 'screen' : 'upload'
-  );
+  // Keep Screen Share as the primary mode on every device. Feature support is checked
+  // only after the user taps the Share button, so mobile browsers can attempt their picker.
+  const [inputMode, setInputMode] = useState<InputMode>('screen');
 
   // Active analysis states
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -324,58 +323,19 @@ export default function App() {
           {/* Left Column: Input Methods */}
           <div className="lg:col-span-5 space-y-4">
             {/* Input Navigation Tabs: Screen Share is Primary */}
-            {!screenCaptureSupported && (
-              <div
-                role="status"
-                className="mb-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 sm:p-4 flex flex-col gap-3"
-              >
-                <div className="flex items-start gap-2.5">
-                  <Smartphone className="w-5 h-5 shrink-0 text-amber-300 mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-amber-100">Phone-friendly mode</p>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-300">
-                      This browser does not support website screen sharing. Take a screenshot of the question,
-                      then choose Upload, or use Camera to photograph the question on another screen.
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setInputMode('upload')}
-                    className="min-h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-3 py-2 text-xs sm:text-sm font-bold text-white transition-colors"
-                  >
-                    <Upload className="inline-block w-4 h-4 mr-1.5 align-text-bottom" />
-                    Choose screenshot
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInputMode('camera')}
-                    className="min-h-11 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-2 text-xs sm:text-sm font-bold text-slate-100 transition-colors"
-                  >
-                    <Camera className="inline-block w-4 h-4 mr-1.5 align-text-bottom" />
-                    Use camera
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="p-1.5 rounded-2xl bg-slate-950/80 border border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+  <div className="p-1.5 rounded-2xl bg-slate-950/80 border border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               <button
                 type="button"
                 onClick={() => setInputMode('screen')}
-                disabled={!screenCaptureSupported}
-                title={screenCaptureSupported ? 'Share a browser tab or display' : 'Screen sharing is not supported in this browser'}
-                className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all ${
-                  !screenCaptureSupported
-                    ? 'opacity-45 cursor-not-allowed text-slate-600'
-                    : inputMode === 'screen'
-                      ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/30 cursor-pointer'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 cursor-pointer'
+                title="Start screen sharing"
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  inputMode === 'screen'
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                 }`}
               >
                 <Monitor className="w-4 h-4 text-cyan-300" />
-                <span className="truncate">{screenCaptureSupported ? 'Screen Share' : 'Desktop Share'}</span>
+                <span className="truncate">Screen Share</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/30 text-amber-300 hidden sm:inline">
                   ⚡ Tez rejim
                 </span>
