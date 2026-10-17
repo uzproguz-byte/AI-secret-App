@@ -112,14 +112,22 @@ export const ScreenSharePanel: React.FC<Props> = ({
 
     const nav = navigator as Navigator & {
       getDisplayMedia?: (options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
+      webkitGetDisplayMedia?: (options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
+      mozGetDisplayMedia?: (options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
     };
     const devices = navigator.mediaDevices as (MediaDevices & {
       getDisplayMedia?: (options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
+      webkitGetDisplayMedia?: (options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
+      mozGetDisplayMedia?: (options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
     }) | undefined;
 
     const getDisplayMedia =
       (devices?.getDisplayMedia && devices.getDisplayMedia.bind(devices)) ||
-      (nav.getDisplayMedia && nav.getDisplayMedia.bind(nav));
+      (devices?.webkitGetDisplayMedia && devices.webkitGetDisplayMedia.bind(devices)) ||
+      (devices?.mozGetDisplayMedia && devices.mozGetDisplayMedia.bind(devices)) ||
+      (nav.getDisplayMedia && nav.getDisplayMedia.bind(nav)) ||
+      (nav.webkitGetDisplayMedia && nav.webkitGetDisplayMedia.bind(nav)) ||
+      (nav.mozGetDisplayMedia && nav.mozGetDisplayMedia.bind(nav));
 
     if (!getDisplayMedia) {
       const mobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
