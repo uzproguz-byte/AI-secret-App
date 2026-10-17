@@ -25,7 +25,9 @@ export const CameraScanner: React.FC<Props> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  // Refs keep camera cleanup reliable across React renders and async permission prompts.
+  const streamRef = useRef<MediaStream | null>(null);
+  const cameraRequestRef = useRef(0);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
@@ -46,9 +48,26 @@ export const CameraScanner: React.FC<Props> = ({
     }
   }, []);
 
-  // Start Camera Stream
+  // Stop Camera Stream
+  const stopCamera = () => {
+    // Invalidate any permission request still in flight so it cannot revive the camera later.
+    cameraRequestRef.current += 1;
+    const activeStream = streamRef.current;
+    streamRef.current = null;
+    if (activeStream) {
+      activeStream.getTracks().forEach((track) => track.stop());
+    }
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+  };
+
+  // Start Camera Stream. A request token prevents stale async camera requests from winning.
   const startCamera = async (mode: 'environment' | 'user' = facingMode) => {
     stopCamera();
+    const requestId = cameraRequestRef.current;
     setCameraError(null);
 
     try {
@@ -65,48 +84,46 @@ export const CameraScanner: React.FC<Props> = ({
         audio: false,
       });
 
-      setStream(mediaStream);
+      if (requestId !== cameraRequestRef.current) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      streamRef.current = mediaStream;
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        videoRef.current.play().catch(() => {});
+        try {
+          await videoRef.current.play();
+        } catch (playError) {
+          // Some mobile browsers only start preview after a direct tap on "Enable Camera".
+          console.info('Camera preview needs a user tap:', playError);
+        }
       }
       setIsCameraActive(true);
     } catch (err: any) {
+      if (requestId !== cameraRequestRef.current) return;
       console.warn('Camera start error:', err);
       setIsCameraActive(false);
       setCameraError(
-        err.name === 'NotAllowedError'
-          ? t.cameraPermissionError
+        err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
+          ? (t.cameraPermissionError || 'Camera permission was denied. You can choose a photo instead.')
           : err.message || 'Could not start camera.'
       );
     }
   };
 
-  // Stop Camera Stream
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setIsCameraActive(false);
-  };
-
-  // Start camera automatically on mount
+  // Start camera automatically on mount; cleanup always stops the latest stream via the ref.
   useEffect(() => {
-    startCamera(facingMode);
+    void startCamera(facingMode);
     return () => {
       stopCamera();
     };
   }, [facingMode]);
 
-  // Flip camera between front and back
+  // Flip camera between front and back. The effect restarts the stream once.
   const handleToggleCamera = () => {
     const nextMode = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(nextMode);
-    startCamera(nextMode);
   };
 
   // Capture Frame and send for solve
@@ -157,7 +174,10 @@ export const CameraScanner: React.FC<Props> = ({
 
   // Fallback direct mobile photo capture from file input
   const handleNativePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    // Clear immediately so choosing the same photo twice still fires onChange on mobile Safari/Chrome.
+    input.value = '';
     if (!file) return;
 
     const reader = new FileReader();
