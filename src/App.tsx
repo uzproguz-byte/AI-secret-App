@@ -13,7 +13,6 @@ import {
   CheckCircle2,
   Zap,
   Camera,
-  Smartphone,
 } from 'lucide-react';
 import { Header } from './components/Header';
 import { ScreenSharePanel } from './components/ScreenSharePanel';
@@ -34,12 +33,6 @@ import {
 import { translations, TranslationDictionary } from './translations';
 
 export default function App() {
-  // Screen Capture API is unavailable in many mobile browsers. Detect support instead of
-  // assuming a phone can share its screen; unsupported devices start with screenshot upload.
-  const screenCaptureSupported =
-    typeof navigator !== 'undefined' &&
-    Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function');
-
   // Mobile mode auto-detection & toggle
   const [isMobileMode, setIsMobileMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
