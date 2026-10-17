@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080b14">
+<title>AI Secret · Screen Capture</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:#080b14;color:#f5f7ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#18234a 0,#080b14 55%);padding:20px}
+main{max-width:760px;margin:0 auto}.top{padding:16px 0 22px}.tag{color:#a5b4fc;font-size:12px;font-weight:800;letter-spacing:.16em}.title{font-size:clamp(28px,6vw,44px);margin:8px 0}.muted{color:#a6b0c8;line-height:1.55}.card{background:#11182a;border:1px solid #293653;border-radius:22px;padding:18px;margin:14px 0;box-shadow:0 18px 50px #0003}.row{display:flex;gap:10px;flex-wrap:wrap}.btn{border:0;border-radius:13px;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;min-height:48px;background:#6366f1;color:white;flex:1}.btn.secondary{background:#222d45;border:1px solid #3a4967}.btn:disabled{opacity:.45;cursor:not-allowed}input,select{font:inherit;color:inherit;background:#0b1120;border:1px solid #34415d;border-radius:12px;padding:12px;width:100%}label{display:block;color:#c5cce0;font-size:13px;font-weight:700;margin:14px 0 7px}video,img.preview{display:block;width:100%;max-height:52vh;object-fit:contain;background:#05070d;border-radius:14px;margin-top:12px}.hidden{display:none!important}.status{padding:12px;border-radius:12px;background:#0b1120;color:#cbd5e1;line-height:1.5;overflow-wrap:anywhere}.status.error{color:#fecaca;border:1px solid #7f1d1d}.answer{white-space:pre-wrap;line-height:1.6;font-size:16px}.pill{display:inline-block;padding:5px 9px;border-radius:9px;background:#153c31;color:#86efac;font-weight:900;font-size:12px}.small{font-size:12px;color:#94a3b8;line-height:1.5}a{color:#a5b4fc}
+</style>
+</head>
+<body><main>
+<header class="top"><div class="tag">AI SECRET · GEMINI TESTER</div><h1 class="title">Screen Capture</h1><p class="muted">Desktop: share a screen or browser tab. Android Chrome: select a screenshot from your phone, because Chrome for Android does not expose full-screen capture to websites.</p></header>
+<section class="card">
+<div class="row"><button class="btn" id="start">Start desktop screen share</button><button class="btn secondary" id="stop" disabled>Stop sharing</button></div>
+<video id="video" autoplay playsinline muted class="hidden"></video>
+<div id="mobileNote" class="status hidden" style="margin-top:12px">Android Chrome cannot provide a live screen stream to this webpage. Use the screenshot option below, or use the native Android companion app for full-phone capture.</div>
+<label for="imageFile">Android screenshot / image</label>
+<input id="imageFile" type="file" accept="image/*">
+<p class="small">Tip: on Android, take a screenshot using your phone's buttons, return to Chrome, then select that screenshot here. Only the image you submit is sent to the AI server.</p>
+<label for="language">Answer language</label><select id="language"><option value="auto">Auto detect</option><option value="uz">O‘zbekcha</option><option value="en">English</option><option value="ru">Русский</option><option value="ar">العربية</option></select>
+<label for="subject">Subject</label><select id="subject"><option value="auto">Auto detect</option><option value="math">Math</option><option value="english">English</option><option value="arabic">Arabic</option><option value="science">Science</option><option value="history">History</option><option value="geography">Geography</option><option value="it">IT / Programming</option></select>
+<div class="row" style="margin-top:14px"><button class="btn" id="analyze" disabled>Analyze with Gemini</button></div>
+<div id="status" class="status" role="status" aria-live="polite" style="margin-top:12px">Ready. Start desktop sharing or choose a screenshot.</div>
+<img id="imagePreview" class="preview hidden" alt="Selected screenshot preview">
+</section>
+<section class="card"><div class="pill">AI RESULT</div><h2 id="answerTitle">Waiting for a question</h2><div id="answer" class="answer muted">Your answer and explanation will appear here.</div></section>
+<p class="small">Privacy: screen capture starts only after you press the button and approve the browser prompt. Stop sharing at any time. Never submit private or sensitive information. AI/network response time varies, so a result under five seconds cannot be guaranteed.</p>
+</main>
+<script>
+(() => {
+ const start=document.getElementById('start'),stop=document.getElementById('stop'),video=document.getElementById('video');
+ const file=document.getElementById('imageFile'),analyze=document.getElementById('analyze'),status=document.getElementById('status');
+ const mobileNote=document.getElementById('mobileNote'),preview=document.getElementById('imagePreview');
+ const answerTitle=document.getElementById('answerTitle'),answer=document.getElementById('answer');
+ let stream=null,selectedImage=null,working=false;
+ const mobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+ const canCapture=!!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
+ if(mobile&&!canCapture){mobileNote.classList.remove('hidden');start.textContent='Screen sharing unavailable on Android';start.disabled=true;}
+ else if(!canCapture){start.textContent='Screen sharing unavailable in this browser';start.disabled=true;}
+ function setStatus(text,error=false){status.textContent=text;status.classList.toggle('error',error);}
+ function stopShare(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}video.srcObject=null;video.classList.add('hidden');stop.disabled=true;start.disabled=mobile&&!canCapture;start.textContent=canCapture?'Start desktop screen share':'Screen sharing unavailable on Android';if(!selectedImage)analyze.disabled=true;}
+ start.addEventListener('click',async()=>{setStatus('Opening browser screen picker…');try{stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});video.srcObject=stream;video.classList.remove('hidden');stop.disabled=false;start.textContent='Sharing is active';start.disabled=true;analyze.disabled=false;stream.getVideoTracks()[0].addEventListener('ended',stopShare);await video.play();setStatus('Screen is shared. Press Analyze with Gemini to analyze the current frame.');}catch(e){stopShare();setStatus(e?.name==='NotAllowedError'?'Screen sharing was cancelled or permission was denied.':(e?.message||'Could not start screen sharing.'),true);}});
+ stop.addEventListener('click',stopShare);
+ file.addEventListener('change',async()=>{selectedImage=null;preview.classList.add('hidden');const f=file.files&&file.files[0];if(!f){analyze.disabled=!stream;return;}if(!f.type.startsWith('image/')){setStatus('Please choose an image file.',true);return;}try{const data=await fileToDataUrl(f);selectedImage=await resizeImage(data);preview.src=selectedImage;preview.classList.remove('hidden');analyze.disabled=false;setStatus('Screenshot ready. Press Analyze with Gemini.');}catch(e){setStatus('Could not read that image. Try another screenshot.',true);}});
+ function fileToDataUrl(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(file);});}
+ function resizeImage(data){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{const scale=Math.min(1,1440/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=c.getContext('2d');if(!ctx){reject(new Error('Canvas unavailable'));return;}ctx.drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.88));};img.onerror=reject;img.src=data;});}
+ function captureCurrentFrame(){if(!stream||!video.videoWidth||!video.videoHeight)return null;const scale=Math.min(1,1440/Math.max(video.videoWidth,video.videoHeight));const c=document.createElement('canvas');c.width=Math.round(video.videoWidth*scale);c.height=Math.round(video.videoHeight*scale);const ctx=c.getContext('2d');if(!ctx)return null;ctx.drawImage(video,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.88);}
+ analyze.addEventListener('click',async()=>{if(working)return;let image=selectedImage;if(!image&&stream)image=captureCurrentFrame();if(!image){setStatus('Start desktop sharing or choose a screenshot first.',true);return;}working=true;analyze.disabled=true;answerTitle.textContent='Analyzing…';answer.textContent='Sending the selected frame to Gemini…';setStatus('Analyzing with Gemini. This may take a few seconds.');const started=performance.now();try{const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image,language:document.getElementById('language').value,subject:document.getElementById('subject').value,fastMode:true})});const payload=await response.json();if(!response.ok||!payload.success)throw new Error(payload.error||'The AI server could not analyze this image.');const result=payload.data||{};answerTitle.textContent=result.correctAnswerLabel?('Answer: '+result.correctAnswerLabel):'Gemini result';answer.textContent=[result.correctAnswerText,result.explanation,result.isUnclear?'The question may be unclear; try a clearer screenshot.':''].filter(Boolean).join('\n\n')||JSON.stringify(result,null,2);setStatus('Finished in '+((performance.now()-started)/1000).toFixed(1)+'s'+(payload.isCached?' (cached result)':''));}catch(e){answerTitle.textContent='Could not analyze';answer.textContent='';setStatus(e?.message||'Request failed. Check your connection and try again.',true);}finally{working=false;analyze.disabled=!(selectedImage||stream);}});
+ window.addEventListener('pagehide',stopShare);
+})();
+</script></body></html>
